@@ -183,7 +183,7 @@ class TestData(Dataset):
 
 def video2sequence(video_path):
     videofolder = video_path.split('.')[0]
-    util.check_mkdir(videofolder)
+    os.makedirs(videofolder, exist_ok=True)
     video_name = video_path.split('/')[-1].split('.')[0]
     vidcap = cv2.VideoCapture(video_path)
     success,image = vidcap.read()

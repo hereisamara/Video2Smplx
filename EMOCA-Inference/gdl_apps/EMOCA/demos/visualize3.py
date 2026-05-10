@@ -60,9 +60,9 @@ def main():
     
     output_folder.mkdir(parents=True, exist_ok=True)
 
-    # 1) Load the model
+    # 1) Load the model - emoca models
     print(f"Loading model: {model_name}...")
-    emoca, conf = load_model(path_to_models, model_name, 'detail')
+    emoca, conf = load_model(path_to_models, model_name, 'detail') #-----
     
     if args.device == 'cuda' and torch.cuda.is_available():
         emoca.cuda()
@@ -78,7 +78,7 @@ def main():
     # 3) Run the model
     for i in auto.tqdm(range(len(dataset))):
         batch = dataset[i]
-        vals, visdict = test(emoca, batch)
+        vals, visdict = test(emoca, batch) #-----
         
         current_bs = batch["image"].shape[0]
 

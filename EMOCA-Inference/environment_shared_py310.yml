@@ -1,0 +1,11 @@
+name: video2smplx_shared310
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - ffmpeg
+  - pip:
+      - -r requirements310.txt
+

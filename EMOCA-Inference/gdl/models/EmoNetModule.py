@@ -29,7 +29,7 @@ from gdl.datasets.AffWild2Dataset import Expression7
 from pathlib import Path
 from gdl.utils.lightning_logging import _log_array_image, _log_wandb_image, _torch_image2np
 from gdl.models.EmotionRecognitionModuleBase import EmotionRecognitionBaseModule
-import pytorch_lightning.plugins.environments.lightning_environment as le
+
 
 
 class EmoNetModule(EmotionRecognitionBaseModule):

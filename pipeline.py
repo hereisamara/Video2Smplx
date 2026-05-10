@@ -60,9 +60,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import numpy as np
-from tqdm import tqdm
-
 # ---------------------------------------------------------------------------
 # Project root and sub-project directories
 # ---------------------------------------------------------------------------
@@ -317,6 +314,8 @@ def stage_fuse(smplestx_dir: Path, wilor_dir: Path,
     if not files:
         print(f'  [ERROR] No SMPLest-X .pkl files found in: {smplestx_dir}')
         return out_dir
+
+    from tqdm import tqdm
 
     wm = wskip = em = eskip = errs = 0
 

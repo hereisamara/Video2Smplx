@@ -56,7 +56,7 @@ from gdl.utils.other import class_from_str, get_path_to_assets
 from gdl.layers.losses.VGGLoss import VGG19Loss
 from omegaconf import OmegaConf, open_dict
 
-import pytorch_lightning.plugins.environments.lightning_environment as le
+
 
 
 class DecaMode(Enum):

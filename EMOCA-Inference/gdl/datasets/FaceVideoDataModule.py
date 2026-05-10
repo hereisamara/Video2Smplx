@@ -180,10 +180,12 @@ class FaceVideoDataModule(FaceDataModuleBase):
             out_folder.mkdir(exist_ok=True, parents=True)
 
             out_format = out_folder / (self.get_frame_number_format() + ".png")
-            out_format = '-r 1 -i %s -r 1 ' % str(video_file) + ' "' + str(out_format) + '"'
-            # out_format = ' -r 1 -i %s ' % str(video_file) + ' "' + "$frame.%03d.png" + '"'
-            # subprocess.call(['ffmpeg', out_format])
-            os.system("ffmpeg " + out_format)
+            subprocess.run(
+                ["ffmpeg", "-y", "-r", "1", "-i", str(video_file), "-r", "1", str(out_format)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
 
             # import ffmpeg
             # stream = ffmpeg.input(str(video_file))
@@ -218,8 +220,10 @@ class FaceVideoDataModule(FaceDataModuleBase):
         if not audio_file.is_file():
             # print("Extracting audio from video '%s'" % str(video_file))
             audio_file.parent.mkdir(exist_ok=True, parents=True)
-            cmd = "ffmpeg -i " + str(video_file) + " -f wav -vn -y " + str(audio_file) + ' -loglevel quiet'
-            os.system(cmd)
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(video_file), "-f", "wav", "-vn", str(audio_file), "-loglevel", "quiet"],
+                check=True,
+            )
         else: 
             print("Skipped extracting audio from video '%s' because it already exists" % str(video_file))
 
@@ -1557,8 +1561,8 @@ class FaceVideoDataModule(FaceDataModuleBase):
                 aud_meta = {}
                 aud_meta['sample_rate'] = aud_info['sample_rate']
                 aud_meta['sample_fmt'] = aud_info['sample_fmt']
-                # aud_meta['num_samples'] = int(aud_info['nb_samples'])
-                aud_meta["num_frames"] = int(aud_info['nb_frames'])
+                # Some containers/codecs do not expose audio nb_frames via ffprobe.
+                aud_meta["num_frames"] = int(aud_info.get('nb_frames', 0) or 0)
                 assert float(aud_info['start_time']) == 0
                 self.audio_metas += [aud_meta]
         
@@ -1732,6 +1736,12 @@ class FaceVideoDataModule(FaceDataModuleBase):
 
         vis_fnames.sort()
         vid_frames.sort()
+
+        if len(vis_fnames) == 0:
+            raise RuntimeError(
+                f"No reconstruction images were found in '{out_folder}'. "
+                f"This usually means frame extraction or face detection produced no inputs."
+            )
 
         if image_type == "detail":
             outfile = vis_fnames[0].parents[1] / "video.mp4"
@@ -3147,11 +3157,28 @@ def attach_audio_to_reconstruction_video(input_video, input_video_with_audio, ou
     output_video = output_video or (Path(input_video).parent / (str(Path(input_video).stem) + "_with_sound.mp4"))
     if output_video.exists() and not overwrite:
         return
-    output_video = str(output_video)
-    cmd = "ffmpeg -y -i %s -i %s -c copy -map 0:0 -map 1:1 -shortest %s" \
-          % (input_video, input_video_with_audio, output_video)
-    os.system(cmd)
-    return output_video
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(input_video),
+            "-i",
+            str(input_video_with_audio),
+            "-c",
+            "copy",
+            "-map",
+            "0:0",
+            "-map",
+            "1:1",
+            "-shortest",
+            str(output_video),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return str(output_video)
 
 
 
