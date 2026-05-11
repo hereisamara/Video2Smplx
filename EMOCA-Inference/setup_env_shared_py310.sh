@@ -62,15 +62,20 @@ pip_in_env "${PIP_INSTALL_ARGS[@]}" \
     torchvision==0.15.2 \
     torchaudio==2.0.2
 
+
+
 echo
 echo "[3/6] Installing shared Python requirements..."
 pip_in_env "${PIP_INSTALL_ARGS[@]}" -r "$SCRIPT_DIR/requirements310.txt"
+pip_in_env "${PIP_INSTALL_ARGS[@]}" chumpy==0.70 --no-build-isolation
+pip_in_env "${PIP_INSTALL_ARGS[@]}" pandas imgaug scikit-learn scikit-video torchfile
 
 echo
 echo "[4/6] Installing PyTorch3D..."
 if ! pip_in_env "${PIP_INSTALL_ARGS[@]}" pytorch3d; then
     echo "PyTorch3D wheel not available; falling back to source install."
-    pip_in_env "${PIP_INSTALL_ARGS[@]}" "git+https://github.com/facebookresearch/pytorch3d.git@stable"
+    # pip_in_env "${PIP_INSTALL_ARGS[@]}" "git+https://github.com/facebookresearch/pytorch3d.git@stable"
+    pip_in_env "${PIP_INSTALL_ARGS[@]}" pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py310_cu118_pyt201/download.html
 fi
 
 echo
