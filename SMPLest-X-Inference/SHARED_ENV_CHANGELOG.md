@@ -23,6 +23,7 @@ This project has been aligned to the shared Python 3.10 environment used with `E
 - added `torch==2.0.1`
 - added `torchvision==0.15.2`
 - added `torchaudio==2.0.2`
+- added `protobuf>=4.25.3,<5`
 - kept `opencv-python==4.11.0.86`
 - kept `smplx==0.1.28`
 - kept `trimesh==4.6.2`
@@ -34,3 +35,4 @@ This project has been aligned to the shared Python 3.10 environment used with `E
 
 - The shared environment also includes EMOCA dependencies that `SMPLest-X` does not import directly. They are present so the same environment can run both repositories without swapping envs.
 - `pytorch3d` is managed from the EMOCA side because it is the package most sensitive to the Torch/CUDA build.
+- `protobuf` follows MediaPipe `0.10.14`'s requirement. The old `protobuf==3.20.3` pin is not compatible with this shared environment.

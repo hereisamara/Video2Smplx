@@ -34,6 +34,7 @@ Compared with the older EMOCA setup script and the original modernization draft,
 - `timm` -> `1.0.14`
 - `opencv-python` -> `4.11.0.86`
 - `mediapipe` -> `0.10.14`
+- `protobuf` -> `>=4.25.3,<5`
 - `trimesh` -> `4.6.2`
 
 Additional shared-environment packages that are now present in the EMOCA stack because `SMPLest-X` requires them:
@@ -73,9 +74,11 @@ Additional packages that become available in the shared environment because EMOC
 - `kornia==0.6.12`
 - `facenet-pytorch==2.5.2`
 - `mediapipe==0.10.14`
+- `protobuf>=4.25.3,<5`
 - `wandb==0.15.12`
 
 ## Notes
 
 - `pytorch3d` is still the strictest dependency in the merged stack. It must match the chosen Torch/CUDA build, so the setup script installs it after Torch rather than pinning a wheel URL that only works for one platform.
+- `protobuf` is intentionally aligned to MediaPipe `0.10.14`. The older EMOCA-era `protobuf==3.20.3` pin conflicts with this MediaPipe release.
 - This changelog describes the dependency merge. It does not claim that every downstream runtime path in both projects has been executed in this workspace.
