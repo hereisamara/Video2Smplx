@@ -12,6 +12,11 @@ This document records the files and dependency changes needed to run `EMOCA-Infe
   - Added a conda environment file that creates the shared Python 3.10 environment and installs the union requirements.
 - `setup_env_shared_py310.sh`
   - Added a repeatable setup script that installs the shared Torch stack first, then the union requirements, then `pytorch3d`, then runs a smoke test.
+  - Updated the script for GPU servers with strict quotas:
+    - Uses `conda run --no-capture-output` so pip progress is visible.
+    - Installs `numpy==1.24.4` before Torch so pip does not pull NumPy 2.x during Torch installation.
+    - Uses `pip install --no-cache-dir` to reduce cache/quota pressure.
+    - Supports `VIDEO2SMPLX_ENV_PREFIX=/path/to/env` for installing the conda env on scratch or project storage.
 - `test_shared_env.py`
   - Added a quick validation script that checks both dependency imports and the EMOCA Swin fallback path, then verifies the key `SMPLest-X` imports.
 
