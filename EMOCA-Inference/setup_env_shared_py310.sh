@@ -80,6 +80,39 @@ echo "[4/7] Installing shared Python requirements..."
 pip_in_env "${PIP_INSTALL_ARGS[@]}" -r "$SCRIPT_DIR/requirements310.txt"
 pip_in_env "${PIP_INSTALL_ARGS[@]}" chumpy==0.70 --no-build-isolation
 pip_in_env "${PIP_INSTALL_ARGS[@]}" pandas imgaug scikit-learn scikit-video torchfile
+run_in_env python - <<'PY'
+import pathlib
+import subprocess
+import sys
+
+result = subprocess.run(
+    [sys.executable, "-m", "pip", "show", "chumpy"],
+    check=True,
+    capture_output=True,
+    text=True,
+)
+location = ""
+for line in result.stdout.splitlines():
+    if line.startswith("Location:"):
+        location = line.split(":", 1)[1].strip()
+        break
+
+init_path = pathlib.Path(location) / "chumpy" / "__init__.py"
+content = init_path.read_text()
+broken = "from numpy import bool, int, float, complex, object, unicode, str, nan, inf"
+fixed = "from numpy import nan, inf\nbool=bool; int=int; float=float; complex=complex; object=object; unicode=str; str=str"
+if broken in content:
+    content = content.replace(broken, fixed)
+    init_path.write_text(content)
+
+ch_path = pathlib.Path(location) / "chumpy" / "ch.py"
+if ch_path.exists():
+    content = ch_path.read_text()
+    content = content.replace("from inspect import getargspec", "from inspect import getfullargspec as getargspec")
+    ch_path.write_text(content)
+
+print(f"Patched chumpy for NumPy/Python 3.10 compatibility at {init_path.parent}")
+PY
 
 echo
 echo "[5/7] Installing PyTorch3D..."

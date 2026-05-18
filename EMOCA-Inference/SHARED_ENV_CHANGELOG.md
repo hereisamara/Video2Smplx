@@ -29,6 +29,11 @@ This document records the files and dependency changes needed to run `EMOCA-Infe
   - Fixed invalid-video cleanup for `TestFaceVideoDM` by keeping `annotation_list` aligned with `video_list` and guarding deletes when optional lists are shorter.
   - Added `ffprobe` stderr output when metadata probing fails, so corrupt/missing/unreadable videos report the actual reason.
   - Included all invalid-video probe reasons in the final `RuntimeError`, so batch job logs show the exact video path and `ffprobe` error instead of only a generic metadata-scan failure.
+- `gdl/models/DecaFLAME.py`
+  - Added a compatibility shim before FLAME pickle loading so legacy `chumpy` imports work with NumPy 1.24 and Python 3.10.
+  - Restores the removed NumPy aliases expected by `chumpy` and provides `inspect.getargspec` via `inspect.getfullargspec`.
+- `setup_env_shared_py310.sh`
+  - Patches the installed `chumpy` package after installation so direct `import chumpy` also works in the shared Python 3.10 environment.
 
 ## Library updates for `EMOCA-Inference`
 
