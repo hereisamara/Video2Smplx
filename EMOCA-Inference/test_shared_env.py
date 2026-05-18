@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import shutil
 import sys
 from pathlib import Path
 
@@ -27,10 +28,20 @@ def check_import(name: str) -> None:
     print(f"[OK] {name}: {version}")
 
 
+def check_executable(name: str) -> None:
+    path = shutil.which(name)
+    if path is None:
+        raise RuntimeError(f"Required executable '{name}' was not found on PATH.")
+    print(f"[OK] {name}: {path}")
+
+
 def main() -> None:
     print(f"Python: {sys.version.split()[0]}")
     if sys.version_info[:2] != (3, 10):
         print("[WARN] Shared environment was designed for Python 3.10.")
+
+    check_executable("ffmpeg")
+    check_executable("ffprobe")
 
     for module_name in REQUIRED_MODULES:
         check_import(module_name)
@@ -61,4 +72,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

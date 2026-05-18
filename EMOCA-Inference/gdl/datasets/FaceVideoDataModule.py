@@ -20,6 +20,7 @@ All rights reserved.
 
 from torch.utils.data.dataloader import DataLoader
 import os, sys
+import json
 import subprocess
 from pathlib import Path
 import numpy as np
@@ -1495,7 +1496,6 @@ class FaceVideoDataModule(FaceDataModuleBase):
         print("Found %d video files." % len(self.video_list))
 
     def _gather_video_metadata(self):
-        import ffmpeg
         self.video_metas = []
         self.audio_metas = []
 
@@ -1504,8 +1504,23 @@ class FaceVideoDataModule(FaceDataModuleBase):
         for vi, vid_file in enumerate(tqdm(self.video_list)):
             video_path = str( Path(self.root_dir) / vid_file)
             try:
-                vid = ffmpeg.probe(video_path)
-            except ffmpeg._run.Error as e: 
+                probe = subprocess.run(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "error",
+                        "-print_format",
+                        "json",
+                        "-show_format",
+                        "-show_streams",
+                        video_path,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                vid = json.loads(probe.stdout)
+            except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError) as e: 
                 print(f"The video file '{video_path}' is corrupted. Skipping it." ) 
                 self.video_metas += [None]
                 self.audio_metas += [None]

@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_NAME="${1:-video2smplx_shared310}"
 ENV_PREFIX="${VIDEO2SMPLX_ENV_PREFIX:-}"
 PIP_INSTALL_ARGS=(install --no-cache-dir --progress-bar on)
+CONDA_INSTALL_ARGS=(install -y -c conda-forge)
 
 echo "=============================================="
 echo " Video2SMPLX Shared Py3.10 Environment Setup"
@@ -44,19 +45,29 @@ pip_in_env() {
 }
 
 echo
-echo "[0/5] Checking Python and pip inside the environment..."
+echo "[0/7] Checking Python and pip inside the environment..."
 run_in_env python --version 
 pip_in_env --version 
 
 echo
-echo "[1/6] Installing critical pins before Torch..." 
+echo "[1/7] Installing ffmpeg and ffprobe executables..."
+if [[ -n "$ENV_PREFIX" ]]; then
+    conda "${CONDA_INSTALL_ARGS[@]}" -p "$ENV_PREFIX" ffmpeg
+else
+    conda "${CONDA_INSTALL_ARGS[@]}" -n "$ENV_NAME" ffmpeg
+fi
+run_in_env ffmpeg -version
+run_in_env ffprobe -version
+
+echo
+echo "[2/7] Installing critical pins before Torch..." 
 pip_in_env "${PIP_INSTALL_ARGS[@]}" \
     "numpy==1.24.4" \
     "setuptools<70.0.0" \
     "wheel"
 
 echo
-echo "[2/6] Installing shared PyTorch stack..." 
+echo "[3/7] Installing shared PyTorch stack..." 
 pip_in_env "${PIP_INSTALL_ARGS[@]}" \
     torch==2.0.1 \
     torchvision==0.15.2 \
@@ -65,13 +76,13 @@ pip_in_env "${PIP_INSTALL_ARGS[@]}" \
 
 
 echo
-echo "[3/6] Installing shared Python requirements..."
+echo "[4/7] Installing shared Python requirements..."
 pip_in_env "${PIP_INSTALL_ARGS[@]}" -r "$SCRIPT_DIR/requirements310.txt"
 pip_in_env "${PIP_INSTALL_ARGS[@]}" chumpy==0.70 --no-build-isolation
 pip_in_env "${PIP_INSTALL_ARGS[@]}" pandas imgaug scikit-learn scikit-video torchfile
 
 echo
-echo "[4/6] Installing PyTorch3D..."
+echo "[5/7] Installing PyTorch3D..."
 if ! pip_in_env "${PIP_INSTALL_ARGS[@]}" pytorch3d; then
     echo "PyTorch3D wheel not available; falling back to source install."
     # pip_in_env "${PIP_INSTALL_ARGS[@]}" "git+https://github.com/facebookresearch/pytorch3d.git@stable"
@@ -79,11 +90,11 @@ if ! pip_in_env "${PIP_INSTALL_ARGS[@]}" pytorch3d; then
 fi
 
 echo
-echo "[5/6] Installing EMOCA package in editable mode..."
+echo "[6/7] Installing EMOCA package in editable mode..."
 pip_in_env install --no-cache-dir -e "$SCRIPT_DIR"
 
 echo
-echo "[6/6] Running a quick import smoke test..."
+echo "[7/7] Running a quick import smoke test..."
 run_in_env python "$SCRIPT_DIR/test_shared_env.py"
 
 echo

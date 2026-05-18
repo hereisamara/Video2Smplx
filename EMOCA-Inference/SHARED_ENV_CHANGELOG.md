@@ -17,8 +17,13 @@ This document records the files and dependency changes needed to run `EMOCA-Infe
     - Installs `numpy==1.24.4` before Torch so pip does not pull NumPy 2.x during Torch installation.
     - Uses `pip install --no-cache-dir` to reduce cache/quota pressure.
     - Supports `VIDEO2SMPLX_ENV_PREFIX=/path/to/env` for installing the conda env on scratch or project storage.
+    - Installs the `ffmpeg` conda package so both `ffmpeg` and `ffprobe` executables are available inside batch jobs.
 - `test_shared_env.py`
   - Added a quick validation script that checks both dependency imports and the EMOCA Swin fallback path, then verifies the key `SMPLest-X` imports.
+  - Added checks for the `ffmpeg` and `ffprobe` executables because EMOCA calls both through subprocess.
+- `gdl/datasets/FaceVideoDataModule.py`
+  - Replaced `ffmpeg.probe(...)` from the Python `ffmpeg` module with a direct `ffprobe` subprocess call that parses JSON output.
+  - This avoids failures when a server has the wrong Python package named `ffmpeg` installed while still using the real `ffprobe` executable.
 
 ## Library updates for `EMOCA-Inference`
 
