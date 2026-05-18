@@ -1520,8 +1520,12 @@ class FaceVideoDataModule(FaceDataModuleBase):
                     text=True,
                 )
                 vid = json.loads(probe.stdout)
-            except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError) as e: 
-                print(f"The video file '{video_path}' is corrupted. Skipping it." ) 
+            except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError) as e:
+                print(f"The video file '{video_path}' could not be probed. Skipping it.")
+                if isinstance(e, subprocess.CalledProcessError) and e.stderr:
+                    print(e.stderr.strip())
+                else:
+                    print(str(e))
                 self.video_metas += [None]
                 self.audio_metas += [None]
                 invalid_videos += [vi]
@@ -1584,14 +1588,17 @@ class FaceVideoDataModule(FaceDataModuleBase):
         for vi in sorted(invalid_videos, reverse=True):
             del self.video_list[vi]
             del self.video_metas[vi]
-            if self.annotation_list is not None:
+            if self.annotation_list is not None and vi < len(self.annotation_list):
                 del self.annotation_list[vi]
     
-            if hasattr(self, "audio_metas") and self.audio_metas is not None:
+            if hasattr(self, "audio_metas") and self.audio_metas is not None and vi < len(self.audio_metas):
                 del self.audio_metas[vi]
         
-            if self.frame_lists is not None:
+            if self.frame_lists is not None and vi < len(self.frame_lists):
                 del self.frame_lists[vi]
+
+        if len(self.video_list) == 0:
+            raise RuntimeError("No valid video files found after ffprobe metadata scan.")
                         
     
     def _loadMeta(self):
@@ -3251,7 +3258,7 @@ class TestFaceVideoDM(FaceVideoDataModule):
         # video_list = sorted(Path(self.root_dir).rglob("*.mp4"))
         self.video_list = [self.video_path.relative_to(self.root_dir)]
 
-        self.annotation_list = []
+        self.annotation_list = [None]
         self._gather_video_metadata()
 
     def _detect_faces_in_image(self, image_path, detected_faces=None):

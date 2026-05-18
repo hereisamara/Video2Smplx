@@ -24,6 +24,8 @@ This document records the files and dependency changes needed to run `EMOCA-Infe
 - `gdl/datasets/FaceVideoDataModule.py`
   - Replaced `ffmpeg.probe(...)` from the Python `ffmpeg` module with a direct `ffprobe` subprocess call that parses JSON output.
   - This avoids failures when a server has the wrong Python package named `ffmpeg` installed while still using the real `ffprobe` executable.
+  - Fixed invalid-video cleanup for `TestFaceVideoDM` by keeping `annotation_list` aligned with `video_list` and guarding deletes when optional lists are shorter.
+  - Added `ffprobe` stderr output when metadata probing fails, so corrupt/missing/unreadable videos report the actual reason.
 
 ## Library updates for `EMOCA-Inference`
 
