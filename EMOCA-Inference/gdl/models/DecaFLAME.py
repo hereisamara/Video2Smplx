@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pickle
+import inspect
 import torch.nn.functional as F
 
 from gdl.utils.lbs import lbs, batch_rodrigues, vertices2landmarks
@@ -32,6 +33,25 @@ class Struct(object):
             setattr(self, key, val)
 
 
+def patch_legacy_chumpy_imports():
+    # FLAME pickles import chumpy, which still expects removed NumPy aliases.
+    aliases = {
+        "bool": bool,
+        "int": int,
+        "float": float,
+        "complex": complex,
+        "object": object,
+        "unicode": str,
+        "str": str,
+    }
+    for name, value in aliases.items():
+        if name not in np.__dict__:
+            setattr(np, name, value)
+
+    if not hasattr(inspect, "getargspec"):
+        inspect.getargspec = inspect.getfullargspec
+
+
 def rot_mat_to_euler(rot_mats):
     # Calculates rotation matrix to euler angles
     # Careful for extreme cases of eular angles like [0.0, pi, 0.0]
@@ -50,6 +70,7 @@ class FLAME(nn.Module):
     def __init__(self, config):
         super(FLAME, self).__init__()
         print("creating the FLAME Decoder")
+        patch_legacy_chumpy_imports()
         with open(config.flame_model_path, 'rb') as f:
             # flame_model = Struct(**pickle.load(f, encoding='latin1'))
             ss = pickle.load(f, encoding='latin1')
