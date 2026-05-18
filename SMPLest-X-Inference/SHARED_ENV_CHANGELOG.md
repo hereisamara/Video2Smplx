@@ -24,6 +24,7 @@ This project has been aligned to the shared Python 3.10 environment used with `E
 - added `torchvision==0.15.2`
 - added `torchaudio==2.0.2`
 - added `protobuf>=4.25.3,<5`
+- added `imageio-ffmpeg==0.6.0`
 - kept `opencv-python==4.11.0.86`
 - kept `smplx==0.1.28`
 - kept `trimesh==4.6.2`

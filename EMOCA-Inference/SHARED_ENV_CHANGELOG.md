@@ -24,8 +24,11 @@ This document records the files and dependency changes needed to run `EMOCA-Infe
 - `gdl/datasets/FaceVideoDataModule.py`
   - Replaced `ffmpeg.probe(...)` from the Python `ffmpeg` module with a direct `ffprobe` subprocess call that parses JSON output.
   - This avoids failures when a server has the wrong Python package named `ffmpeg` installed while still using the real `ffprobe` executable.
+  - Added executable resolution helpers for `ffmpeg` and `ffprobe`; they first use PATH and then try `imageio-ffmpeg` as a fallback.
+  - Added an OpenCV metadata fallback so EMOCA can continue video processing when `ffprobe` is unavailable but OpenCV can read the video stream.
   - Fixed invalid-video cleanup for `TestFaceVideoDM` by keeping `annotation_list` aligned with `video_list` and guarding deletes when optional lists are shorter.
   - Added `ffprobe` stderr output when metadata probing fails, so corrupt/missing/unreadable videos report the actual reason.
+  - Included all invalid-video probe reasons in the final `RuntimeError`, so batch job logs show the exact video path and `ffprobe` error instead of only a generic metadata-scan failure.
 
 ## Library updates for `EMOCA-Inference`
 
@@ -88,4 +91,5 @@ Additional packages that become available in the shared environment because EMOC
 
 - `pytorch3d` is still the strictest dependency in the merged stack. It must match the chosen Torch/CUDA build, so the setup script installs it after Torch rather than pinning a wheel URL that only works for one platform.
 - `protobuf` is intentionally aligned to MediaPipe `0.10.14`. The older EMOCA-era `protobuf==3.20.3` pin conflicts with this MediaPipe release.
+- `ffprobe` is required for EMOCA video metadata. Prefer installing conda-forge `ffmpeg` or loading the cluster's ffmpeg module; `imageio-ffmpeg` is only a fallback and may not provide `ffprobe` on every platform.
 - This changelog describes the dependency merge. It does not claim that every downstream runtime path in both projects has been executed in this workspace.

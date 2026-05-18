@@ -21,6 +21,7 @@ All rights reserved.
 from torch.utils.data.dataloader import DataLoader
 import os, sys
 import json
+import shutil
 import subprocess
 from pathlib import Path
 import numpy as np
@@ -54,6 +55,86 @@ import types
 from gdl.utils.FaceDetector import save_landmark, save_landmark_v2
 
 # from memory_profiler import profile
+
+
+def _resolve_executable(name):
+    executable = shutil.which(name)
+    if executable is not None:
+        return executable
+
+    if name in {"ffmpeg", "ffprobe"}:
+        try:
+            import imageio_ffmpeg
+
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            if name == "ffmpeg":
+                return ffmpeg_exe
+
+            candidate = Path(ffmpeg_exe).with_name("ffprobe")
+            if candidate.is_file():
+                return str(candidate)
+        except Exception:
+            pass
+
+    raise FileNotFoundError(
+        f"Required executable '{name}' was not found. Install conda-forge ffmpeg "
+        f"or ensure '{name}' is available on PATH."
+    )
+
+
+def _ffmpeg_exe():
+    return _resolve_executable("ffmpeg")
+
+
+def _ffprobe_exe():
+    return _resolve_executable("ffprobe")
+
+
+def _probe_video_with_ffprobe(video_path):
+    probe = subprocess.run(
+        [
+            _ffprobe_exe(),
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            video_path,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(probe.stdout)
+
+
+def _video_metadata_from_opencv(video_path):
+    cap = cv2.VideoCapture(video_path)
+    try:
+        if not cap.isOpened():
+            raise RuntimeError("OpenCV could not open the video file.")
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 0
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+
+        if width <= 0 or height <= 0:
+            raise RuntimeError("OpenCV could not read video dimensions.")
+
+        if fps <= 0:
+            fps = 1
+
+        return {
+            "fps": f"{fps}/1",
+            "width": width,
+            "height": height,
+            "num_frames": num_frames,
+            "bit_rate": "300000000",
+        }
+    finally:
+        cap.release()
 
 
 def add_pretrained_deca_to_path():
@@ -182,7 +263,7 @@ class FaceVideoDataModule(FaceDataModuleBase):
 
             out_format = out_folder / (self.get_frame_number_format() + ".png")
             subprocess.run(
-                ["ffmpeg", "-y", "-r", "1", "-i", str(video_file), "-r", "1", str(out_format)],
+                [_ffmpeg_exe(), "-y", "-r", "1", "-i", str(video_file), "-r", "1", str(out_format)],
                 check=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -222,7 +303,7 @@ class FaceVideoDataModule(FaceDataModuleBase):
             # print("Extracting audio from video '%s'" % str(video_file))
             audio_file.parent.mkdir(exist_ok=True, parents=True)
             subprocess.run(
-                ["ffmpeg", "-y", "-i", str(video_file), "-f", "wav", "-vn", str(audio_file), "-loglevel", "quiet"],
+                [_ffmpeg_exe(), "-y", "-i", str(video_file), "-f", "wav", "-vn", str(audio_file), "-loglevel", "quiet"],
                 check=True,
             )
         else: 
@@ -1500,90 +1581,94 @@ class FaceVideoDataModule(FaceDataModuleBase):
         self.audio_metas = []
 
         invalid_videos = []
+        invalid_video_reasons = []
 
         for vi, vid_file in enumerate(tqdm(self.video_list)):
             video_path = str( Path(self.root_dir) / vid_file)
+            vid = None
             try:
-                probe = subprocess.run(
-                    [
-                        "ffprobe",
-                        "-v",
-                        "error",
-                        "-print_format",
-                        "json",
-                        "-show_format",
-                        "-show_streams",
-                        video_path,
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
-                vid = json.loads(probe.stdout)
+                vid = _probe_video_with_ffprobe(video_path)
             except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError) as e:
-                print(f"The video file '{video_path}' could not be probed. Skipping it.")
+                reason = str(e)
                 if isinstance(e, subprocess.CalledProcessError) and e.stderr:
-                    print(e.stderr.strip())
-                else:
-                    print(str(e))
-                self.video_metas += [None]
-                self.audio_metas += [None]
-                invalid_videos += [vi]
-                continue
-            # codec_idx = [idx for idx in range(len(vid)) if vid['streams'][idx]['codec_type'] == 'video']
-            codec_idx = [idx for idx in range(len(vid['streams'])) if vid['streams'][idx]['codec_type'] == 'video']
-            if len(codec_idx) == 0:
-                raise RuntimeError("Video file has no video streams! '%s'" % str(vid_file))
-            if len(codec_idx) > 1:
-                # raise RuntimeError("Video file has two video streams! '%s'" % str(vid_file))
-                print("[WARNING] Video file has %d video streams. Only the first one will be processed" % len(codec_idx))
-            codec_idx = codec_idx[0]
-            vid_info = vid['streams'][codec_idx]
-            assert vid_info['codec_type'] == 'video'
-            vid_meta = {}
-            vid_meta['fps'] = vid_info['avg_frame_rate']
-            vid_meta['width'] = int(vid_info['width'])
-            vid_meta['height'] = int(vid_info['height'])
-            if 'nb_frames' in vid_info.keys():
-                vid_meta['num_frames'] = int(vid_info['nb_frames'])
-            elif 'num_frames' in vid_info.keys():
-                vid_meta['num_frames'] = int(vid_info['num_frames'])
-            else: 
-                vid_meta['num_frames'] = 0
-            # make the frame number reading a bit more robest, sometims the above does not work and gives zeros
-            if vid_meta['num_frames'] == 0: 
-                vid_meta['num_frames'] = int(subprocess.check_output(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", 
-                    video_path]))
-            if vid_meta['num_frames'] == 0: 
-                _vr = skvideo.io.FFmpegReader(video_path)
-                vid_meta['num_frames'] = _vr.getShape()[0]
-                del _vr
-            vid_meta['bit_rate'] = vid_info['bit_rate']
-            if 'bits_per_raw_sample' in vid_info.keys():
-                vid_meta['bits_per_raw_sample'] = vid_info['bits_per_raw_sample']
-            self.video_metas += [vid_meta]
+                    reason = e.stderr.strip()
+                print(f"The video file '{video_path}' could not be probed with ffprobe. Trying OpenCV metadata fallback.")
+                print(reason)
 
-            # audio codec
-            codec_idx = [idx for idx in range(len(vid['streams'])) if vid['streams'][idx]['codec_type'] == 'audio']
-            if len(codec_idx) > 1:
-                raise RuntimeError("Video file has two audio streams! '%s'" % str(vid_file))
-            if len(codec_idx) == 0:
-                if self._must_include_audio is True or self._must_include_audio == 'strict':
-                    raise RuntimeError("Video file has no audio streams! '%s'" % str(vid_file))
-                elif self._must_include_audio == 'warn':
-                    print("[WARNING] Video file has no audio streams! '%s'" % str(vid_file))
-                self.audio_metas += [None]
+            if vid is None:
+                try:
+                    vid_meta = _video_metadata_from_opencv(video_path)
+                    self.video_metas += [vid_meta]
+                    self.audio_metas += [None]
+                    continue
+                except Exception as opencv_error:
+                    reason = f"ffprobe failed and OpenCV fallback failed: {opencv_error}"
+                    print(f"The video file '{video_path}' could not be read. Skipping it.")
+                    print(reason)
+                    self.video_metas += [None]
+                    self.audio_metas += [None]
+                    invalid_videos += [vi]
+                    invalid_video_reasons += [(video_path, reason)]
+                    continue
             else:
+                # codec_idx = [idx for idx in range(len(vid)) if vid['streams'][idx]['codec_type'] == 'video']
+                codec_idx = [idx for idx in range(len(vid['streams'])) if vid['streams'][idx]['codec_type'] == 'video']
+                if len(codec_idx) == 0:
+                    raise RuntimeError("Video file has no video streams! '%s'" % str(vid_file))
+                if len(codec_idx) > 1:
+                    # raise RuntimeError("Video file has two video streams! '%s'" % str(vid_file))
+                    print("[WARNING] Video file has %d video streams. Only the first one will be processed" % len(codec_idx))
                 codec_idx = codec_idx[0]
-                aud_info = vid['streams'][codec_idx]
-                assert aud_info['codec_type'] == 'audio'
-                aud_meta = {}
-                aud_meta['sample_rate'] = aud_info['sample_rate']
-                aud_meta['sample_fmt'] = aud_info['sample_fmt']
-                # Some containers/codecs do not expose audio nb_frames via ffprobe.
-                aud_meta["num_frames"] = int(aud_info.get('nb_frames', 0) or 0)
-                assert float(aud_info['start_time']) == 0
-                self.audio_metas += [aud_meta]
+                vid_info = vid['streams'][codec_idx]
+                assert vid_info['codec_type'] == 'video'
+                vid_meta = {}
+                vid_meta['fps'] = vid_info['avg_frame_rate']
+                vid_meta['width'] = int(vid_info['width'])
+                vid_meta['height'] = int(vid_info['height'])
+                if 'nb_frames' in vid_info.keys():
+                    vid_meta['num_frames'] = int(vid_info['nb_frames'])
+                elif 'num_frames' in vid_info.keys():
+                    vid_meta['num_frames'] = int(vid_info['num_frames'])
+                else: 
+                    vid_meta['num_frames'] = 0
+                # make the frame number reading a bit more robest, sometims the above does not work and gives zeros
+                if vid_meta['num_frames'] == 0:
+                    try:
+                        vid_meta['num_frames'] = int(subprocess.check_output([_ffprobe_exe(), "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0",
+                            video_path]))
+                    except FileNotFoundError:
+                        pass
+                if vid_meta['num_frames'] == 0: 
+                    _vr = skvideo.io.FFmpegReader(video_path)
+                    vid_meta['num_frames'] = _vr.getShape()[0]
+                    del _vr
+                vid_meta['bit_rate'] = vid_info.get('bit_rate', '300000000')
+                if 'bits_per_raw_sample' in vid_info.keys():
+                    vid_meta['bits_per_raw_sample'] = vid_info['bits_per_raw_sample']
+                self.video_metas += [vid_meta]
+
+                # audio codec
+                codec_idx = [idx for idx in range(len(vid['streams'])) if vid['streams'][idx]['codec_type'] == 'audio']
+                if len(codec_idx) > 1:
+                    raise RuntimeError("Video file has two audio streams! '%s'" % str(vid_file))
+                if len(codec_idx) == 0:
+                    if self._must_include_audio is True or self._must_include_audio == 'strict':
+                        raise RuntimeError("Video file has no audio streams! '%s'" % str(vid_file))
+                    elif self._must_include_audio == 'warn':
+                        print("[WARNING] Video file has no audio streams! '%s'" % str(vid_file))
+                    self.audio_metas += [None]
+                else:
+                    codec_idx = codec_idx[0]
+                    aud_info = vid['streams'][codec_idx]
+                    assert aud_info['codec_type'] == 'audio'
+                    aud_meta = {}
+                    aud_meta['sample_rate'] = aud_info['sample_rate']
+                    aud_meta['sample_fmt'] = aud_info['sample_fmt']
+                    # Some containers/codecs do not expose audio nb_frames via ffprobe.
+                    aud_meta["num_frames"] = int(aud_info.get('nb_frames', 0) or 0)
+                    if 'start_time' in aud_info:
+                        assert float(aud_info['start_time']) == 0
+                    self.audio_metas += [aud_meta]
         
         for vi in sorted(invalid_videos, reverse=True):
             del self.video_list[vi]
@@ -1598,7 +1683,10 @@ class FaceVideoDataModule(FaceDataModuleBase):
                 del self.frame_lists[vi]
 
         if len(self.video_list) == 0:
-            raise RuntimeError("No valid video files found after ffprobe metadata scan.")
+            reason_text = "\n".join(
+                f"- {video_path}: {reason}" for video_path, reason in invalid_video_reasons
+            )
+            raise RuntimeError(f"No valid video files found after ffprobe metadata scan.\n{reason_text}")
                         
     
     def _loadMeta(self):

@@ -30,8 +30,24 @@ def check_import(name: str) -> None:
 
 def check_executable(name: str) -> None:
     path = shutil.which(name)
+    if path is None and name in {"ffmpeg", "ffprobe"}:
+        try:
+            import imageio_ffmpeg
+
+            ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+            if name == "ffmpeg":
+                path = ffmpeg_exe
+            else:
+                candidate = Path(ffmpeg_exe).with_name("ffprobe")
+                if candidate.is_file():
+                    path = str(candidate)
+        except Exception:
+            pass
+
     if path is None:
-        raise RuntimeError(f"Required executable '{name}' was not found on PATH.")
+        raise RuntimeError(
+            f"Required executable '{name}' was not found on PATH or through imageio-ffmpeg."
+        )
     print(f"[OK] {name}: {path}")
 
 
