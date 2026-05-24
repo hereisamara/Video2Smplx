@@ -213,7 +213,7 @@ def stage_wilor(env: str) -> Path:
     """
     _banner('STAGE 2 — WiLoR hand inference')
 
-    wilor_result_dir = ROOT / 'demo' / 'result_params_unified'
+    wilor_result_dir = ROOT / 'demo' / 'result_params_unified' / 'params'
     wilor_result_dir.mkdir(parents=True, exist_ok=True)
 
     conda_run(
@@ -222,13 +222,12 @@ def stage_wilor(env: str) -> Path:
         [
             '--img_folder', str(SHARED_FRAMES_DIR),
             '--out_folder', str(wilor_result_dir),
-            '--save_params',
         ],
         cwd=WILOR_DIR,
         label='WiLoR',
     )
 
-    out = ROOT / 'demo' / 'result_params_unified' / 'params'
+    out = wilor_result_dir
     n = len(list(out.glob('*.pkl'))) if out.exists() else 0
     print(f'\n  Done. {n} .pkl files → {out}')
     return out

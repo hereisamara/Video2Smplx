@@ -53,8 +53,7 @@ pip install -r requirements.txt
 ```bash
 python demo_params_unified.py \
     --img_folder <path/to/input/images> \
-    --out_folder <path/to/output> \
-    --save_params
+    --out_folder <path/to/output>
 ```
 
 ### Arguments
@@ -62,9 +61,7 @@ python demo_params_unified.py \
 | Argument | Default | Description |
 |---|---|---|
 | `--img_folder` | `images` | Folder containing input images |
-| `--out_folder` | `out_demo` | Folder to save output results |
-| `--save_params` | `False` | Save hand parameters as `.pkl` per frame |
-| `--save_mesh` | `False` | Save hand meshes as `.obj` files |
+| `--out_folder` | `out_demo` | Folder to save hand parameter `.pkl` files |
 | `--rescale_factor` | `2.0` | Padding factor around detected bounding box |
 | `--file_type` | `*.jpg *.png *.jpeg` | Image file extensions to process |
 
@@ -73,22 +70,18 @@ python demo_params_unified.py \
 ```bash
 python demo_params_unified.py \
     --img_folder ../demo/input \
-    --out_folder ../demo/result_params_unified \
-    --save_params
+    --out_folder ../demo/result_params_unified/params
 ```
 
 ---
 
 ## Output
 
-For each input image, two output types are produced:
+For each input image with at least one detected hand, unified hand parameters are saved automatically.
 
-### 1. Rendered overlay image
-- Saved to `<out_folder>/<image_name>.jpg`
-- Input image with 3D hand mesh overlaid
+### Unified hand parameters
 
-### 2. Unified hand parameters (with `--save_params`)
-- Saved to `<out_folder>/params/<image_name>_params.pkl`
+- Saved to `<out_folder>/<image_name>_params.pkl`
 - One `.pkl` file per frame containing:
 
 ```python
