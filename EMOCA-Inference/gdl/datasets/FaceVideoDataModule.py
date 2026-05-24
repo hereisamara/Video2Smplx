@@ -3278,7 +3278,7 @@ def attach_audio_to_reconstruction_video(input_video, input_video_with_audio, ou
         return
     subprocess.run(
         [
-            "ffmpeg",
+            _ffmpeg_exe(),
             "-y",
             "-i",
             str(input_video),

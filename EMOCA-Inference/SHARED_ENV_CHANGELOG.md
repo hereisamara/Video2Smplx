@@ -13,6 +13,83 @@ Format for future entries:
 - Verification
 - Notes
 
+## 2026-05-24 - EMOCA audio attachment ffmpeg resolver fix
+
+### Scope
+
+- Repository: `EMOCA-Inference`
+- File: `gdl/datasets/FaceVideoDataModule.py`
+- Function: `attach_audio_to_reconstruction_video(...)`
+- Runtime environment: existing `video2smplx_shared310`
+
+### Problem observed
+
+EMOCA finished reconstruction-video frame writing, then failed while attaching the original audio:
+
+```text
+FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
+```
+
+The failure happened after the decimal-FPS crash was fixed, at:
+
+```text
+attach_audio_to_reconstruction_video(...)
+subprocess.run(...)
+```
+
+### Root cause
+
+Most `ffmpeg` calls had already been routed through `_ffmpeg_exe()`, which resolves the executable from PATH and then falls back to `imageio-ffmpeg`.
+
+`attach_audio_to_reconstruction_video(...)` still used a literal command name:
+
+```python
+"ffmpeg"
+```
+
+On the server batch job, `ffmpeg` was not visible on PATH inside the launched process, so `subprocess.Popen` failed before the command could run.
+
+### Code changes
+
+- Replaced the final hardcoded `"ffmpeg"` subprocess call with `_ffmpeg_exe()`.
+- This makes audio attachment use the same executable-resolution path as frame extraction and audio extraction.
+
+### Manual server action
+
+Pull or copy the updated repository code on the server:
+
+```bash
+cd /lustrefs/disk/home/khtun/video2simplx/Video2SmplxPy10/Video2Smplx/EMOCA-Inference
+git pull
+```
+
+Then rerun the same EMOCA command in the existing environment.
+
+If it still reports that `ffmpeg` cannot be found, install or expose `ffmpeg` manually:
+
+```bash
+conda install -n video2smplx_shared310 -c conda-forge ffmpeg
+```
+
+If the cluster uses modules instead of conda packages, load the module that provides both `ffmpeg` and `ffprobe` before submitting the job.
+
+### Verification
+
+After pulling the code, verify the environment path:
+
+```bash
+conda run -n video2smplx_shared310 ffmpeg -version
+conda run -n video2smplx_shared310 ffprobe -version
+```
+
+Then rerun EMOCA. The previous log already shows the FPS issue is fixed because it reached `attach_audio_to_reconstruction_video(...)`.
+
+### Notes
+
+- This fix is code-only if `imageio-ffmpeg` is installed and usable.
+- A manual `ffmpeg` install is still the most reliable server setup because `ffprobe` is also required for metadata.
+- The warnings about PyTorch Lightning checkpoint migration, torchvision `pretrained`, FLAME tensor construction, missing `template.mtl`, and `grid_sample` are warnings, not the active failure in this log.
+
 ## 2026-05-24 - EMOCA decimal FPS video writer fix
 
 ### Scope
