@@ -137,6 +137,17 @@ def _video_metadata_from_opencv(video_path):
         cap.release()
 
 
+def _parse_video_fps(fps):
+    fps = str(fps)
+    if "/" in fps:
+        numerator, denominator = fps.split("/", 1)
+        denominator = float(denominator)
+        if denominator == 0:
+            raise ValueError(f"Invalid video fps value: {fps}")
+        return float(numerator) / denominator
+    return float(fps)
+
+
 def add_pretrained_deca_to_path():
     deca_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'DECA'))
     if deca_path not in sys.path:
@@ -1384,7 +1395,7 @@ class FaceVideoDataModule(FaceDataModuleBase):
                             # video_writer = cv2.VideoWriter(filename=str(vis_folder / "video.mp4"), apiPreference=cv2.CAP_FFMPEG,
                             #                                fourcc=fourcc, fps=dm.video_metas[sequence_id]['fps'], frameSize=(vis_im.shape[1], vis_im.shape[0]))
                             video_writer = cv2.VideoWriter(str(vis_folder / "video.mp4"), cv2.CAP_FFMPEG,
-                                                           fourcc, int(self.video_metas[sequence_id]['fps'].split('/')[0]),
+                                                           fourcc, _parse_video_fps(self.video_metas[sequence_id]['fps']),
                                                            (vis_im.shape[1], vis_im.shape[0]), True)
                         if save_video:
                             video_writer.write(vis_im)
@@ -1997,9 +2008,7 @@ class FaceVideoDataModule(FaceDataModuleBase):
             if writer is None:
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 # outfile = str(vis_folder / "video.mp4")
-                
-                # fps = int(self.video_metas[sequence_id]['fps'].split('/')[0])
-                fps = int(self.video_metas[sequence_id]['fps'].split('/')[0]) / int(self.video_metas[sequence_id]['fps'].split('/')[1])
+                fps = _parse_video_fps(self.video_metas[sequence_id]['fps'])
                 writer = cv2.VideoWriter(str(outfile), cv2.CAP_FFMPEG,
                                          fourcc, fps,
                                          (im.shape[1], im.shape[0]), True)
@@ -2146,7 +2155,7 @@ class FaceVideoDataModule(FaceDataModuleBase):
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 # outfile = str(vis_folder / "video.mp4")
                 writer = cv2.VideoWriter(str(outfile), cv2.CAP_FFMPEG,
-                                         fourcc, int(self.video_metas[sequence_id]['fps'].split('/')[0]),
+                                         fourcc, _parse_video_fps(self.video_metas[sequence_id]['fps']),
                                          (im.shape[1], im.shape[0]), True)
             im_cv = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
             writer.write(im_cv)
@@ -2319,7 +2328,7 @@ class FaceVideoDataModule(FaceDataModuleBase):
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 # outfile = str(vis_folder / "video.mp4")
                 writer = cv2.VideoWriter(str(outfile), cv2.CAP_FFMPEG,
-                                         fourcc, int(self.video_metas[sequence_id]['fps'].split('/')[0]),
+                                         fourcc, _parse_video_fps(self.video_metas[sequence_id]['fps']),
                                          (im.shape[1], im.shape[0]), True)
             im_cv = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
             writer.write(im_cv)
