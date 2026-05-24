@@ -49,6 +49,7 @@ pyopengl
 json_tricks==3.17.3
 einops==0.8.1
 ultralytics==8.3.75
+dill==0.3.8
 
 # Build / tooling
 pip-tools

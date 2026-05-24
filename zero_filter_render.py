@@ -22,6 +22,8 @@ Edit the CONFIGURATION block at the bottom, then run:
 """
 
 import os
+os.environ.setdefault('PYOPENGL_PLATFORM', 'egl')
+
 import glob
 import pickle
 import numpy as np

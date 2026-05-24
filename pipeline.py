@@ -213,6 +213,23 @@ def stage_wilor(env: str) -> Path:
     """
     _banner('STAGE 2 — WiLoR hand inference')
 
+    required = [
+        WILOR_DIR / 'pretrained_models' / 'wilor_final.ckpt',
+        WILOR_DIR / 'pretrained_models' / 'detector.pt',
+        WILOR_DIR / 'pretrained_models' / 'model_config.yaml',
+        WILOR_DIR / 'mano_data' / 'mano_mean_params.npz',
+        WILOR_DIR / 'mano_data' / 'MANO_RIGHT.pkl',
+    ]
+    missing = [p for p in required if not p.exists()]
+    if missing:
+        missing_text = '\n'.join(f'  - {p}' for p in missing)
+        raise FileNotFoundError(
+            'WiLoR pretrained assets are missing:\n'
+            f'{missing_text}\n'
+            'Copy/download these files into the listed WiLoR-Inference paths '
+            'before running the combined pipeline.'
+        )
+
     wilor_result_dir = ROOT / 'demo' / 'result_params_unified' / 'params'
     wilor_result_dir.mkdir(parents=True, exist_ok=True)
 

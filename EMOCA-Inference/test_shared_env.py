@@ -19,6 +19,7 @@ REQUIRED_MODULES = [
     "trimesh",
     "smplx",
     "ultralytics",
+    "dill",
 ]
 
 
