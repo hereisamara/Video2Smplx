@@ -30,6 +30,8 @@ Input Video
 Output: smplest_wilor_emoca.mp4  +  fused .pkl per frame
 ```
 
+For a deeper system-level explanation of how the three projects interact, what each model contributes, and where to refactor for earlier fusion, see [SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md).
+
 ---
 
 ## Directory Structure
