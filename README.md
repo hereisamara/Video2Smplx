@@ -38,10 +38,19 @@ For a deeper system-level explanation of how the three projects interact, what e
 
 ```
 MoE/
-├── pipeline.py                    <- Master orchestrator (run this)
+├── pipeline.py                    <- Legacy file-based orchestrator
 ├── smplestx_wilor_emoca_fuse.py   <- Standalone 3-way fusion script
 ├── zero_filter_render.py          <- Zero transl + SG smooth + pyrender video
 ├── memo.txt                       <- Developer notes / quick commands
+│
+├── video2smplx/                   <- Integrated one-process pipeline package
+│   ├── integrated_pipeline.py     <- Loads all runners once and fuses per frame
+│   ├── frames.py                  <- In-process frame extraction/listing
+│   ├── fusion.py                  <- Pure fusion, validation, vector rebuilds
+│   └── runners/
+│       ├── smplestx.py            <- SMPLest-X in-process runner
+│       ├── wilor.py               <- WiLoR in-process runner
+│       └── emoca.py               <- EMOCA in-process runner
 │
 ├── demo/
 │   ├── input/                     <- Extracted frames (shared, PERSISTENT)
@@ -341,7 +350,30 @@ pretrained-models section above.
 
 ## Quick Start
 
-### Run the Full Pipeline
+### Run the Integrated One-Process Pipeline
+
+This is the preferred path for the combined system. SMPLest-X, WiLoR, and
+EMOCA are loaded once as Python runner objects, predictions stay in memory per
+frame, and only the final fused SMPL-X params are written.
+
+```bash
+conda run --no-capture-output -n video2smplx_shared310 python -m video2smplx.integrated_pipeline \
+    --video  demo/P.mp4 \
+    --output outputs/P \
+    --device cuda
+```
+
+To write fused params without rendering:
+
+```bash
+conda run --no-capture-output -n video2smplx_shared310 python -m video2smplx.integrated_pipeline \
+    --video  demo/P.mp4 \
+    --output outputs/P \
+    --device cuda \
+    --skip_render
+```
+
+### Run the Legacy File-Based Pipeline
 
 ```bash
 conda run --no-capture-output -n video2smplx_shared310 python pipeline.py \
@@ -488,7 +520,8 @@ After a complete run, the output directory contains:
 ├── fused_params/          <- Per-frame fused .pkl (SMPLest-X + WiLoR + EMOCA)
 │   ├── 000001_params.pkl
 │   ├── 000002_params.pkl
-│   └── ...
+│   ├── ...
+│   └── fusion_report.json <- Match counts, missing data counts, validation warnings
 └── rendered/
     ├── smplest_wilor_emoca.mp4   <- Final 3D animation video
     └── params/                   <- Smoothed + zeroed .pkl (final output params)
@@ -512,9 +545,9 @@ person = frame_data[0]   # first (and typically only) person
 #   right_hand_pose   (45,)  15 joints x3 axis-angle  (from WiLoR)
 #   jaw_pose          (3,)   jaw rotation              (from EMOCA)
 #   betas             (10,)  body shape
-#   expression        (10,)  facial expression (10-dim subset from EMOCA's 50-dim)
+#   expression        (10 or 50,) facial expression; 50 when EMOCA is fused
 #   transl            (3,)   root translation (zeroed)
-#   smplx_param_vector (182,) all params concatenated
+#   smplx_param_vector (182 or 222,) all params concatenated
 ```
 
 ---

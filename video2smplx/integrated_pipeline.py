@@ -1,0 +1,234 @@
+"""One-process Video2Smplx pipeline.
+
+This path loads SMPLest-X, WiLoR, and EMOCA once as Python runner objects,
+then performs body/hand/face inference and fusion per frame in memory.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import pickle
+from pathlib import Path
+
+from video2smplx.frames import extract_frames_cv2, list_frames
+from video2smplx.fusion import FusionStats, fuse_frame, validate_person
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SMPLESTX_DIR = ROOT / "SMPLest-X-Inference"
+WILOR_DIR = ROOT / "WiLoR-Inference"
+EMOCA_DIR = ROOT / "EMOCA-Inference"
+DEFAULT_SMPLX_MODEL = (
+    SMPLESTX_DIR
+    / "human_models"
+    / "human_model_files"
+    / "smplx"
+    / "SMPLX_NEUTRAL.npz"
+)
+
+
+def _clear_frame_dir(frame_dir: Path) -> None:
+    frame_dir.mkdir(parents=True, exist_ok=True)
+    for path in frame_dir.iterdir():
+        if path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp"}:
+            path.unlink()
+
+
+def _has_hand_data(hands: dict) -> bool:
+    return hands.get("right_hand_pose") is not None or hands.get("left_hand_pose") is not None
+
+
+def _has_face_data(face: dict) -> bool:
+    return face.get("exp") is not None or face.get("jaw_pose") is not None
+
+
+def run_integrated_pipeline(
+    video: Path,
+    output: Path,
+    name: str | None = None,
+    fps: int = 30,
+    reuse_frames: bool = False,
+    frames_dir: Path | None = None,
+    smplestx_ckpt: str = "smplest_x_h",
+    emoca_model: str = "EMOCA_v2_lr_mse_20",
+    device: str = "cuda",
+    multi_person: bool = False,
+    skip_render: bool = False,
+    smplx_model: Path = DEFAULT_SMPLX_MODEL,
+    smooth_window: int = 15,
+    smooth_poly: int = 3,
+    viewport: int = 800,
+) -> dict:
+    from tqdm import tqdm
+
+    video = Path(video).resolve()
+    output = Path(output).resolve()
+    run_name = name or video.stem
+    frames_dir = Path(frames_dir).resolve() if frames_dir else output / "frames"
+    fused_dir = output / "fused_params"
+    rendered_dir = output / "rendered"
+    report_path = fused_dir / "fusion_report.json"
+
+    if not video.exists() and not reuse_frames:
+        raise FileNotFoundError(f"Video not found: {video}")
+
+    fused_dir.mkdir(parents=True, exist_ok=True)
+    if reuse_frames:
+        frames = list_frames(frames_dir)
+    else:
+        _clear_frame_dir(frames_dir)
+        frames = extract_frames_cv2(video, frames_dir, fps=fps)
+
+    if not frames:
+        raise RuntimeError(f"No frames available in: {frames_dir}")
+
+    print("\n" + "#" * 72)
+    print("  INTEGRATED VIDEO2SMPLX PIPELINE")
+    print("#" * 72)
+    print(f"  name       : {run_name}")
+    print(f"  video      : {video}")
+    print(f"  output     : {output}")
+    print(f"  frames     : {frames_dir} ({len(frames)} frames)")
+    print(f"  device     : {device}")
+    print("#" * 72)
+
+    from video2smplx.runners.emoca import EMOCARunner
+    from video2smplx.runners.smplestx import SmplestXRunner
+    from video2smplx.runners.wilor import WiLoRRunner
+
+    print("\n[load] SMPLest-X")
+    smplestx = SmplestXRunner(
+        SMPLESTX_DIR,
+        ckpt_name=smplestx_ckpt,
+        device=device,
+        multi_person=multi_person,
+    )
+    print("\n[load] WiLoR")
+    wilor = WiLoRRunner(WILOR_DIR, device=device)
+    print("\n[load] EMOCA")
+    emoca = EMOCARunner(EMOCA_DIR, model_name=emoca_model, device=device)
+
+    stats = FusionStats(total_frames=len(frames))
+
+    for frame in tqdm(frames, desc="Integrated inference"):
+        dst = fused_dir / f"{frame.frame_id:06d}_params.pkl"
+        try:
+            body = smplestx.predict(frame)
+            if not body:
+                with open(dst, "wb") as f:
+                    pickle.dump([], f)
+                stats.empty_smplestx_frames += 1
+                continue
+
+            hands = wilor.predict(frame)
+            if _has_hand_data(hands):
+                stats.wilor_matched += 1
+            else:
+                stats.wilor_missing += 1
+
+            face = emoca.predict(frame)
+            if _has_face_data(face):
+                stats.emoca_matched += 1
+            else:
+                stats.emoca_missing += 1
+
+            fused = fuse_frame(body, hands, face)
+            validation_errors = validate_person(fused[0])
+            if validation_errors:
+                stats.validation_errors += len(validation_errors)
+                stats.warnings.append(
+                    f"{frame.frame_id:06d}_params.pkl: {'; '.join(validation_errors)}"
+                )
+
+            with open(dst, "wb") as f:
+                pickle.dump(fused, f)
+        except Exception as exc:
+            stats.errors += 1
+            stats.warnings.append(f"{frame.frame_id:06d}: {exc}")
+            with open(dst, "wb") as f:
+                pickle.dump([], f)
+
+    with open(report_path, "w") as f:
+        json.dump(stats.to_dict(), f, indent=2)
+
+    final_video = rendered_dir / "smplest_wilor_emoca.mp4"
+    if not skip_render:
+        from zero_filter_render import run_pipeline as run_render_pipeline
+
+        rendered_dir.mkdir(parents=True, exist_ok=True)
+        run_render_pipeline(
+            input_pkl_folder=str(fused_dir),
+            smplx_model_path=str(smplx_model),
+            output_dir=str(rendered_dir),
+            smooth_window_length=smooth_window,
+            smooth_polyorder=smooth_poly,
+            video_fps=fps,
+            viewport_size=viewport,
+        )
+
+    summary = {
+        "name": run_name,
+        "frames": len(frames),
+        "output": str(output),
+        "fused_params": str(fused_dir),
+        "fusion_report": str(report_path),
+        "rendered_video": str(final_video) if not skip_render else None,
+        "stats": stats.to_dict(),
+    }
+    print("\n" + "#" * 72)
+    print("  INTEGRATED PIPELINE COMPLETE")
+    print(f"  Fused params   : {fused_dir}")
+    print(f"  Fusion report  : {report_path}")
+    if not skip_render:
+        print(f"  Rendered video : {final_video}")
+    print("#" * 72)
+    return summary
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run SMPLest-X, WiLoR, and EMOCA as in-process runners.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--video", required=True, help="Input video path.")
+    parser.add_argument("--output", required=True, help="Output directory.")
+    parser.add_argument("--name", default=None, help="Run name.")
+    parser.add_argument("--fps", type=int, default=30, help="Extraction/output FPS.")
+    parser.add_argument("--frames_dir", default=None, help="Optional extracted frame directory.")
+    parser.add_argument("--reuse_frames", action="store_true", help="Use --frames_dir instead of extracting.")
+    parser.add_argument("--smplestx_ckpt", default="smplest_x_h", help="SMPLest-X checkpoint name.")
+    parser.add_argument("--emoca_model", default="EMOCA_v2_lr_mse_20", help="EMOCA model name.")
+    parser.add_argument("--device", default="cuda", help="Device for model inference.")
+    parser.add_argument("--multi_person", action="store_true", help="Keep all SMPLest-X people.")
+    parser.add_argument("--skip_render", action="store_true", help="Only write fused params.")
+    parser.add_argument("--smplx_model", default=str(DEFAULT_SMPLX_MODEL), help="SMPL-X model path for render.")
+    parser.add_argument("--smooth_window", type=int, default=15)
+    parser.add_argument("--smooth_poly", type=int, default=3)
+    parser.add_argument("--viewport", type=int, default=800)
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    run_integrated_pipeline(
+        video=Path(args.video),
+        output=Path(args.output),
+        name=args.name,
+        fps=args.fps,
+        reuse_frames=args.reuse_frames,
+        frames_dir=Path(args.frames_dir) if args.frames_dir else None,
+        smplestx_ckpt=args.smplestx_ckpt,
+        emoca_model=args.emoca_model,
+        device=args.device,
+        multi_person=args.multi_person,
+        skip_render=args.skip_render,
+        smplx_model=Path(args.smplx_model),
+        smooth_window=args.smooth_window,
+        smooth_poly=args.smooth_poly,
+        viewport=args.viewport,
+    )
+
+
+if __name__ == "__main__":
+    main()

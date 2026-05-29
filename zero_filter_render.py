@@ -103,16 +103,22 @@ def stage_smooth(
     n_frames = len(all_data)
     print(f"  Frames: {n_frames}  |  window={window_length}, polyorder={polyorder}")
 
-    if n_frames < window_length:
+    valid_frames = [
+        (idx, data[0])
+        for idx, data in enumerate(all_data)
+        if data and isinstance(data[0], dict)
+    ]
+    n_valid = len(valid_frames)
+
+    if n_valid < window_length:
         raise ValueError(
-            f"Not enough frames ({n_frames}) for window_length={window_length}. "
+            f"Not enough valid frames ({n_valid}) for window_length={window_length}. "
             "Reduce smooth_window_length."
         )
 
     # --- Collect time-series per key ---
     timeseries = {k: [] for k in KEYS_TO_SMOOTH}
-    for data in all_data:
-        params = data[0]
+    for _, params in valid_frames:
         for key in KEYS_TO_SMOOTH:
             if key in params:
                 timeseries[key].append(params[key])
@@ -120,20 +126,19 @@ def stage_smooth(
     # --- Smooth each key ---
     smoothed = {}
     for key, frames_list in timeseries.items():
-        if len(frames_list) != n_frames:
+        if len(frames_list) != n_valid:
             print(f"  [WARNING] '{key}' missing in some frames — skipping.")
             continue
-        arr    = np.array(frames_list)               # (T, ...)
-        flat   = arr.reshape(n_frames, -1)            # (T, D)
+        arr    = np.array(frames_list)               # (T_valid, ...)
+        flat   = arr.reshape(n_valid, -1)             # (T_valid, D)
         s_flat = savgol_filter(flat, window_length, polyorder, axis=0)
         smoothed[key] = s_flat.reshape(arr.shape)
         print(f"  Smoothed '{key}'  shape={arr.shape}")
 
     # --- Write smoothed values back into all_data ---
-    for i, data in enumerate(all_data):
-        p = data[0]
+    for valid_idx, (_, p) in enumerate(valid_frames):
         for key, s_arr in smoothed.items():
-            p[key] = s_arr[i]
+            p[key] = s_arr[valid_idx]
         if all(k in p for k in PARAM_VECTOR_KEYS):
             p['smplx_param_vector'] = np.concatenate(
                 [p[k] for k in PARAM_VECTOR_KEYS], axis=-1
