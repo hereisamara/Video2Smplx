@@ -86,8 +86,11 @@ MoE/
     │   │   └── deca_model.tar       <- DECA pretrained weights (415 MB)
     │   └── FaceRecognition/
     │       └── resnet50_ft_weight.pkl <- Face recognition weights (158 MB)
-    ├── setup_env.sh               <- One-command environment setup (EMOCA)
-    └── requirements38.txt
+    ├── setup_env.sh               <- Legacy EMOCA-only Python 3.8 setup
+    ├── setup_env_shared_py310.sh  <- Shared Python 3.10 setup script
+    ├── requirements38.txt
+    ├── requirements310.txt        <- Shared environment pip requirements
+    └── test_shared_env.py         <- Shared environment smoke test
 ```
 
 ---
@@ -133,45 +136,206 @@ MoE/
 
 ## Environment Setup
 
-This pipeline runs each sub-system in its own isolated conda environment to avoid dependency conflicts. Merging all three into one environment is **not possible** due to incompatible versions of `timm`, `omegaconf`, and `pytorch-lightning`.
+Recommended setup is one shared Python 3.10 conda environment for SMPLest-X,
+WiLoR, EMOCA, and rendering. This is easier to reproduce in Colab than the
+older split-env setup, and it is the environment name used below:
 
-| Environment | Used by | Python |
-|-------------|---------|--------|
-| `ubuntu` | SMPLest-X, WiLoR, Rendering | 3.10 |
-| `work38d` | EMOCA | 3.8 |
-
-### SMPLest-X + WiLoR Environment (`ubuntu`)
-
-```bash
-# Key packages
-pip install torch torchvision  # CUDA version matching your driver
-pip install smplx ultralytics timm einops pyrender trimesh tqdm scipy opencv-python
-pip install pytorch-lightning yacs hydra-core
-
-# WiLoR requires chumpy from GitHub
-pip install --no-build-isolation git+https://github.com/mattloper/chumpy
+```text
+video2smplx_shared310
 ```
 
-Or install from the respective requirements files:
-```bash
-pip install -r SMPLest-X-Inference/requirements.txt
-pip install -r WiLoR-Inference/requirements.txt
+Do not install Torch, Chumpy, or PyTorch3D blindly through a requirements file.
+Install them separately in the order below because they are sensitive to the
+Python, NumPy, CUDA, and setuptools versions.
+
+### 0. Start Colab With GPU + Conda
+
+In Colab, set **Runtime -> Change runtime type -> GPU** first.
+
+```python
+!nvidia-smi
+!pip install -q condacolab
+import condacolab
+condacolab.install()
 ```
 
-### EMOCA Environment (`work38d`)
+Colab restarts after `condacolab.install()`. Continue from the next cell after
+the restart.
 
-```bash
-cd EMOCA-Inference
-chmod +x setup_env.sh
-./setup_env.sh
+### 1. Clone Or Open The Repo
+
+```python
+%cd /content
+# Replace this with your fork/remote, or mount Google Drive and cd to the repo.
+!git clone <YOUR_REPO_URL> Video2Smplx
+%cd /content/Video2Smplx
 ```
 
-The setup script creates conda environment `work38d` with:
-- Python 3.8, PyTorch 1.12.1, CUDA 11.3
-- PyTorch3D (pre-built wheel)
-- All pip dependencies + GDL package installation
-- Compatibility patches (MediaPipe, Chumpy, NumPy)
-- WSL2 CUDA path fix (if on WSL2)
+### 2. Create The Shared Environment
+
+```python
+!conda create -y -n video2smplx_shared310 python=3.10 pip
+!conda install -y -n video2smplx_shared310 -c conda-forge ffmpeg
+
+!conda run -n video2smplx_shared310 python --version
+!conda run -n video2smplx_shared310 ffmpeg -version
+!conda run -n video2smplx_shared310 ffprobe -version
+```
+
+`ffmpeg` and `ffprobe` are required by frame extraction, EMOCA video loading,
+and final video writing.
+
+### 3. Install Build Pins Before Requirements
+
+```python
+!conda run -n video2smplx_shared310 python -m pip install --no-cache-dir \
+    "numpy==1.24.4" \
+    "setuptools<70.0.0" \
+    ninja \
+    wheel
+```
+
+If you use a different env name such as `emoca310` or `env2`, replace
+`video2smplx_shared310` in every command.
+
+### 4. Install PyTorch Separately
+
+```python
+!conda run -n video2smplx_shared310 python -m pip install --no-cache-dir \
+    torch==2.0.1 \
+    torchvision==0.15.2 \
+    torchaudio==2.0.2 \
+    --index-url https://download.pytorch.org/whl/cu118
+```
+
+This must be separate from requirements so PyTorch3D can match the selected
+Torch/CUDA build.
+
+### 5. Install Repo Requirements
+
+Use the shared Python 3.10 requirements file:
+
+```python
+!conda run -n video2smplx_shared310 python -m pip install --no-cache-dir \
+    -r EMOCA-Inference/requirements310.txt
+```
+
+Do not run `SMPLest-X-Inference/requirements.txt` or
+`WiLoR-Inference/requirements.txt` unedited in this shared environment, because
+those files can reinstall Torch or Chumpy. If you use them manually, remove or
+comment out the `torch`, `torchvision`, `torchaudio`, and `chumpy` lines first.
+
+Install the extra packages that are used by EMOCA and WiLoR paths but may not be
+pulled in by the shared requirements:
+
+```python
+!conda run -n video2smplx_shared310 python -m pip install --no-cache-dir \
+    yacs \
+    pandas \
+    imgaug \
+    scikit-learn \
+    scikit-video \
+    torchfile \
+    dill
+```
+
+### 6. Install Chumpy Separately
+
+```python
+!conda run -n video2smplx_shared310 python -m pip install --no-cache-dir \
+    chumpy==0.70 \
+    --no-build-isolation
+```
+
+### 7. Patch Chumpy For Python 3.10 / NumPy 1.24
+
+Chumpy imports aliases removed from modern NumPy and uses
+`inspect.getargspec`, which was removed in Python 3.11 and is unsafe on newer
+Python stacks. Patch the installed package after installing it:
+
+```bash
+%%bash
+conda run -n video2smplx_shared310 python - <<'PY'
+import pathlib
+import subprocess
+import sys
+
+result = subprocess.run(
+    [sys.executable, "-m", "pip", "show", "chumpy"],
+    check=True,
+    capture_output=True,
+    text=True,
+)
+
+location = ""
+for line in result.stdout.splitlines():
+    if line.startswith("Location:"):
+        location = line.split(":", 1)[1].strip()
+        break
+
+if not location:
+    raise RuntimeError("Could not find installed chumpy location")
+
+pkg_dir = pathlib.Path(location) / "chumpy"
+init_path = pkg_dir / "__init__.py"
+ch_path = pkg_dir / "ch.py"
+
+content = init_path.read_text()
+broken = "from numpy import bool, int, float, complex, object, unicode, str, nan, inf"
+fixed = (
+    "from numpy import nan, inf\n"
+    "bool=bool; int=int; float=float; complex=complex; "
+    "object=object; unicode=str; str=str"
+)
+if broken in content:
+    init_path.write_text(content.replace(broken, fixed))
+
+if ch_path.exists():
+    content = ch_path.read_text()
+    content = content.replace(
+        "from inspect import getargspec",
+        "from inspect import getfullargspec as getargspec",
+    )
+    ch_path.write_text(content)
+
+print(f"Patched chumpy at {pkg_dir}")
+PY
+```
+
+### 8. Install PyTorch3D Separately
+
+```python
+!conda run -n video2smplx_shared310 python -m pip install --no-index --no-cache-dir \
+    pytorch3d \
+    -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/py310_cu118_pyt201/download.html
+```
+
+If this wheel is unavailable for the active Colab image, the Torch/CUDA/Python
+combination does not match the wheel page. Keep Python 3.10, Torch 2.0.1, and
+CUDA 11.8 together for this documented setup.
+
+### 9. Install EMOCA As An Editable Package
+
+```python
+!conda run -n video2smplx_shared310 python -m pip install --no-cache-dir \
+    -e EMOCA-Inference
+```
+
+### 10. Smoke Test The Environment
+
+```python
+!conda run --no-capture-output -n video2smplx_shared310 python EMOCA-Inference/test_shared_env.py
+
+!conda run --no-capture-output -n video2smplx_shared310 python -c "import chumpy, pytorch3d, yacs; print('Chumpy, PyTorch3D, and yacs imports OK')"
+```
+
+At this point, place the required model files in the paths listed in the
+pretrained-models section above.
+
+> Local shortcut: the repo also contains
+> `EMOCA-Inference/setup_env_shared_py310.sh`, which performs the same setup.
+> The Colab cells above show the individual steps explicitly so failures are
+> easier to debug.
 
 ---
 
@@ -180,22 +344,26 @@ The setup script creates conda environment `work38d` with:
 ### Run the Full Pipeline
 
 ```bash
-python pipeline.py \
+conda run --no-capture-output -n video2smplx_shared310 python pipeline.py \
     --video  demo/P.mp4 \
     --output demo/output \
-    --smplestx_env ubuntu \
-    --wilor_env    ubuntu \
-    --emoca_env    work38d
+    --smplestx_env video2smplx_shared310 \
+    --wilor_env    video2smplx_shared310 \
+    --emoca_env    video2smplx_shared310 \
+    --render_env   video2smplx_shared310
 ```
 
 ### Full Example with All Options
 
 ```bash
-python pipeline.py \
+conda run --no-capture-output -n video2smplx_shared310 python pipeline.py \
     --video  demo/P.mp4 \
     --output demo/output \
     --name   my_run \
-    --smplestx_env ubuntu  --wilor_env ubuntu  --emoca_env work38d \
+    --smplestx_env video2smplx_shared310 \
+    --wilor_env    video2smplx_shared310 \
+    --emoca_env    video2smplx_shared310 \
+    --render_env   video2smplx_shared310 \
     --smplestx_ckpt smplest_x_h \
     --emoca_model   EMOCA_v2_lr_mse_20 \
     --fps 30  --viewport 800 \
@@ -216,12 +384,15 @@ python pipeline.py \
 
 ### Conda Environments
 
+The parser defaults are legacy local environment names. After following the
+Colab/shared setup above, pass `video2smplx_shared310` to all environment flags.
+
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `--smplestx_env` | `ubuntu` | Conda env for SMPLest-X |
-| `--wilor_env` | `ubuntu` | Conda env for WiLoR |
-| `--emoca_env` | `work38d` | Conda env for EMOCA |
-| `--render_env` | same as `smplestx_env` | Conda env for rendering (needs smplx, pyrender, scipy, torch) |
+| `--smplestx_env` | `ubuntu` | Conda env for SMPLest-X; use `video2smplx_shared310` for the shared setup |
+| `--wilor_env` | `ubuntu` | Conda env for WiLoR; use `video2smplx_shared310` for the shared setup |
+| `--emoca_env` | `work38d` | Conda env for EMOCA; use `video2smplx_shared310` for the shared setup |
+| `--render_env` | same as `smplestx_env` | Conda env for rendering; use `video2smplx_shared310` for the shared setup |
 
 ### Model Options
 
@@ -375,7 +546,7 @@ python zero_filter_render.py \
 
 ## WSL2 Notes
 
-On WSL2, EMOCA requires the CUDA library path to be set. The `setup_env.sh` script handles this automatically. If you see:
+On WSL2, EMOCA may require the CUDA library path to be set. If you see:
 
 ```
 Could not load library libcudnn_cnn_infer.so.8
@@ -385,7 +556,7 @@ Run:
 ```bash
 source ~/.bashrc
 # or manually:
-export LD_LIBRARY_PATH="/usr/lib/wsl/lib:/home/$USER/miniconda3/envs/work38d/lib/python3.8/site-packages/torch/lib:$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH="/usr/lib/wsl/lib:/home/$USER/miniconda3/envs/video2smplx_shared310/lib/python3.10/site-packages/torch/lib:$LD_LIBRARY_PATH"
 ```
 
 ---
