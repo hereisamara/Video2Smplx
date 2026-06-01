@@ -384,6 +384,19 @@ conda run --no-capture-output -n video2smplx_shared310 python -m video2smplx.int
     --materialize_frames
 ```
 
+For upper-body-only videos where SMPLest-X produces unstable legs, enable
+lower-body stabilization. This keeps the primary person's lower-body
+`body_pose` joints from the first valid frame while leaving upper body, hands,
+face, shape, and camera outputs dynamic:
+
+```bash
+conda run --no-capture-output -n video2smplx_shared310 python -m video2smplx.integrated_pipeline \
+    --video  demo/P.mp4 \
+    --output outputs/P \
+    --device cuda \
+    --stabilize_lower_body
+```
+
 ### Run the Legacy File-Based Pipeline
 
 ```bash

@@ -75,6 +75,10 @@ Video2Smplx/
     Rebuilds smplx_param_vector after specialist overrides.
     Produces data used by pipeline.py Stage 4.
 
+  video2smplx/stabilization.py
+    Optional SMPL-X pose stabilization helpers.
+    Can hold lower-body body_pose joints from the first valid frame.
+
   video2smplx/integrated_pipeline.py
     One-process pipeline.
     Loads SMPLest-X, WiLoR, and EMOCA runners once.
@@ -1381,6 +1385,19 @@ Need careful device memory management.
 More refactor work.
 Harder resume if a late frame fails unless per-frame writes are robust.
 ```
+
+Optional lower-body stabilization:
+
+```bash
+python -m video2smplx.integrated_pipeline \
+  --video demo/P.mp4 \
+  --output outputs/P \
+  --stabilize_lower_body
+```
+
+This is useful for upper-body-only videos where SMPLest-X invents unstable leg
+motion. The option stores the first valid frame's lower-body `body_pose` joints
+for the primary person and reapplies only those joints on later frames.
 
 ### Level 6: Shared Detections
 

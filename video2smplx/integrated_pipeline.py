@@ -14,6 +14,7 @@ from pathlib import Path
 
 from video2smplx.frames import extract_frames_cv2, iter_video_frames_cv2, list_frames
 from video2smplx.fusion import FusionStats, fuse_frame, validate_person
+from video2smplx.stabilization import LowerBodyStabilizer
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +65,7 @@ def run_integrated_pipeline(
     smplestx_dir: Path = SMPLESTX_DIR,
     wilor_dir: Path = WILOR_DIR,
     emoca_dir: Path = EMOCA_DIR,
+    stabilize_lower_body: bool = False,
 ) -> dict:
     from tqdm import tqdm
 
@@ -124,6 +126,7 @@ def run_integrated_pipeline(
     else:
         print(f"  frames     : {frame_source} ({frame_count} frames)")
     print(f"  device     : {device}")
+    print(f"  lower body : {'first-frame stabilized' if stabilize_lower_body else 'dynamic'}")
     print("#" * 72)
 
     from video2smplx.runners.emoca import EMOCARunner
@@ -144,6 +147,7 @@ def run_integrated_pipeline(
 
     stats = FusionStats()
     fused_outputs: list[tuple[str, list]] = []
+    lower_body_stabilizer = LowerBodyStabilizer() if stabilize_lower_body else None
 
     for frame in tqdm(frame_iterable, total=frame_count, desc="Integrated inference"):
         stats.total_frames += 1
@@ -154,6 +158,8 @@ def run_integrated_pipeline(
                 fused_outputs.append((out_name, []))
                 stats.empty_smplestx_frames += 1
                 continue
+            if lower_body_stabilizer is not None:
+                body = lower_body_stabilizer.apply(body, frame.frame_id)
 
             hands = wilor.predict(frame)
             if _has_hand_data(hands):
@@ -224,6 +230,19 @@ def run_integrated_pipeline(
         "fusion_report": str(report_path),
         "rendered_video": str(final_video) if not skip_render else None,
         "stats": stats.to_dict(),
+        "lower_body_stabilization": {
+            "enabled": stabilize_lower_body,
+            "reference_frame_id": (
+                lower_body_stabilizer.reference_frame_id
+                if lower_body_stabilizer is not None
+                else None
+            ),
+            "applied_frames": (
+                lower_body_stabilizer.applied_frames
+                if lower_body_stabilizer is not None
+                else 0
+            ),
+        },
     }
     print("\n" + "#" * 72)
     print("  INTEGRATED PIPELINE COMPLETE")
@@ -258,6 +277,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--emoca_dir", default=str(EMOCA_DIR), help="EMOCA project/assets directory.")
     parser.add_argument("--device", default="cuda", help="Device for model inference.")
     parser.add_argument("--multi_person", action="store_true", help="Keep all SMPLest-X people.")
+    parser.add_argument(
+        "--stabilize_lower_body",
+        action="store_true",
+        help="Hold primary person's lower-body SMPL-X body_pose joints from the first valid frame.",
+    )
     parser.add_argument("--skip_render", action="store_true", help="Only write fused params.")
     parser.add_argument("--smplx_model", default=str(DEFAULT_SMPLX_MODEL), help="SMPL-X model path for render.")
     parser.add_argument("--smooth_window", type=int, default=15)
@@ -288,6 +312,7 @@ def main() -> None:
         smplestx_dir=Path(args.smplestx_dir),
         wilor_dir=Path(args.wilor_dir),
         emoca_dir=Path(args.emoca_dir),
+        stabilize_lower_body=args.stabilize_lower_body,
     )
 
 
