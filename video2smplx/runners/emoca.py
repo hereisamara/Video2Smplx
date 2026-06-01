@@ -46,10 +46,19 @@ class EMOCARunner:
             ],
             "EMOCA",
         )
-        if not checkpoint_dir.exists() or not list(checkpoint_dir.glob("*.ckpt")):
+        checkpoints = []
+        if checkpoint_dir.exists():
+            checkpoints = list(checkpoint_dir.glob("*.ckpt"))
+            if not checkpoints:
+                checkpoints = [
+                    path
+                    for path in checkpoint_dir.rglob("*")
+                    if path.is_file() and path.suffix == ""
+                ]
+        if not checkpoints:
             raise FileNotFoundError(
                 "EMOCA checkpoint is missing:\n"
-                f"  - expected at least one *.ckpt in {checkpoint_dir}"
+                f"  - expected at least one checkpoint file in {checkpoint_dir}"
             )
 
         add_project_to_path(self.project_dir)

@@ -61,11 +61,25 @@ def run_integrated_pipeline(
     smooth_window: int = 15,
     smooth_poly: int = 3,
     viewport: int = 800,
+    smplestx_dir: Path = SMPLESTX_DIR,
+    wilor_dir: Path = WILOR_DIR,
+    emoca_dir: Path = EMOCA_DIR,
 ) -> dict:
     from tqdm import tqdm
 
     video = Path(video).resolve()
     output = Path(output).resolve()
+    smplestx_dir = Path(smplestx_dir).resolve()
+    wilor_dir = Path(wilor_dir).resolve()
+    emoca_dir = Path(emoca_dir).resolve()
+    if smplx_model == DEFAULT_SMPLX_MODEL and smplestx_dir != SMPLESTX_DIR:
+        smplx_model = (
+            smplestx_dir
+            / "human_models"
+            / "human_model_files"
+            / "smplx"
+            / "SMPLX_NEUTRAL.npz"
+        )
     run_name = name or video.stem
     frames_dir = Path(frames_dir).resolve() if frames_dir else output / "frames"
     fused_dir = output / "fused_params"
@@ -102,6 +116,9 @@ def run_integrated_pipeline(
     print(f"  name       : {run_name}")
     print(f"  video      : {video}")
     print(f"  output     : {output}")
+    print(f"  smplestx   : {smplestx_dir}")
+    print(f"  wilor      : {wilor_dir}")
+    print(f"  emoca      : {emoca_dir}")
     if frame_count is None:
         print(f"  frames     : {frame_source}")
     else:
@@ -115,15 +132,15 @@ def run_integrated_pipeline(
 
     print("\n[load] SMPLest-X")
     smplestx = SmplestXRunner(
-        SMPLESTX_DIR,
+        smplestx_dir,
         ckpt_name=smplestx_ckpt,
         device=device,
         multi_person=multi_person,
     )
     print("\n[load] WiLoR")
-    wilor = WiLoRRunner(WILOR_DIR, device=device)
+    wilor = WiLoRRunner(wilor_dir, device=device)
     print("\n[load] EMOCA")
-    emoca = EMOCARunner(EMOCA_DIR, model_name=emoca_model, device=device)
+    emoca = EMOCARunner(emoca_dir, model_name=emoca_model, device=device)
 
     stats = FusionStats()
     fused_outputs: list[tuple[str, list]] = []
@@ -236,6 +253,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--smplestx_ckpt", default="smplest_x_h", help="SMPLest-X checkpoint name.")
     parser.add_argument("--emoca_model", default="EMOCA_v2_lr_mse_20", help="EMOCA model name.")
+    parser.add_argument("--smplestx_dir", default=str(SMPLESTX_DIR), help="SMPLest-X project/assets directory.")
+    parser.add_argument("--wilor_dir", default=str(WILOR_DIR), help="WiLoR project/assets directory.")
+    parser.add_argument("--emoca_dir", default=str(EMOCA_DIR), help="EMOCA project/assets directory.")
     parser.add_argument("--device", default="cuda", help="Device for model inference.")
     parser.add_argument("--multi_person", action="store_true", help="Keep all SMPLest-X people.")
     parser.add_argument("--skip_render", action="store_true", help="Only write fused params.")
@@ -265,6 +285,9 @@ def main() -> None:
         smooth_window=args.smooth_window,
         smooth_poly=args.smooth_poly,
         viewport=args.viewport,
+        smplestx_dir=Path(args.smplestx_dir),
+        wilor_dir=Path(args.wilor_dir),
+        emoca_dir=Path(args.emoca_dir),
     )
 
 
