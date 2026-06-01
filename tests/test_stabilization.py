@@ -2,7 +2,11 @@ import unittest
 
 import numpy as np
 
-from video2smplx.stabilization import LOWER_BODY_JOINT_INDICES, LowerBodyStabilizer
+from video2smplx.stabilization import (
+    LOWER_BODY_JOINT_INDICES,
+    GlobalOrientStabilizer,
+    LowerBodyStabilizer,
+)
 
 
 class LowerBodyStabilizerTest(unittest.TestCase):
@@ -36,6 +40,20 @@ class LowerBodyStabilizerTest(unittest.TestCase):
 
         upper_joint_idx = 15
         self.assertTrue(np.allclose(second_21x3[upper_joint_idx], 100.0))
+        self.assertEqual(stabilizer.reference_frame_id, 1)
+        self.assertEqual(stabilizer.applied_frames, 1)
+
+
+class GlobalOrientStabilizerTest(unittest.TestCase):
+    def test_freezes_global_orient_after_first_valid_frame(self):
+        stabilizer = GlobalOrientStabilizer()
+        first = [{"global_orient": np.array([0.1, 0.2, 0.3], dtype=np.float32)}]
+        second = [{"global_orient": np.array([0.4, 0.5, 0.6], dtype=np.float32)}]
+
+        stabilizer.apply(first, frame_id=1)
+        stabilizer.apply(second, frame_id=2)
+
+        self.assertTrue(np.allclose(second[0]["global_orient"], first[0]["global_orient"]))
         self.assertEqual(stabilizer.reference_frame_id, 1)
         self.assertEqual(stabilizer.applied_frames, 1)
 

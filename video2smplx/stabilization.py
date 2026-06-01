@@ -45,3 +45,29 @@ class LowerBodyStabilizer:
         people[0]["body_pose"] = pose_21x3.reshape(-1)
         self.applied_frames += 1
         return people
+
+
+@dataclass
+class GlobalOrientStabilizer:
+    """Keep SMPL-X root orientation fixed from the first valid frame."""
+
+    reference_orient: np.ndarray | None = None
+    reference_frame_id: int | None = None
+    applied_frames: int = 0
+
+    def apply(self, people: list[dict[str, Any]], frame_id: int | None = None) -> list[dict[str, Any]]:
+        if not people or not isinstance(people[0], dict) or "global_orient" not in people[0]:
+            return people
+
+        global_orient = flattened_array(people[0]["global_orient"])
+        if global_orient.shape[0] != 3:
+            return people
+
+        if self.reference_orient is None:
+            self.reference_orient = global_orient.copy()
+            self.reference_frame_id = frame_id
+            return people
+
+        people[0]["global_orient"] = self.reference_orient.copy()
+        self.applied_frames += 1
+        return people
