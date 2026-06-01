@@ -48,6 +48,37 @@ def extract_frames_cv2(video: Path, output_dir: Path, fps: int | None = None) ->
     return frames
 
 
+def iter_video_frames_cv2(video: Path, fps: int | None = None):
+    """Yield decoded video frames as in-memory BGR arrays."""
+    import cv2
+
+    video = Path(video).resolve()
+    cap = cv2.VideoCapture(str(video))
+    if not cap.isOpened():
+        raise FileNotFoundError(f"Could not open video: {video}")
+
+    source_fps = cap.get(cv2.CAP_PROP_FPS) or 0
+    frame_interval = 1
+    if fps and source_fps > 0 and fps < source_fps:
+        frame_interval = max(1, round(source_fps / fps))
+
+    source_idx = 0
+    output_idx = 1
+    try:
+        while True:
+            ok, image_bgr = cap.read()
+            if not ok:
+                break
+            source_idx += 1
+            if (source_idx - 1) % frame_interval != 0:
+                continue
+
+            yield FrameInput(frame_id=output_idx, image_bgr=image_bgr)
+            output_idx += 1
+    finally:
+        cap.release()
+
+
 def list_frames(frame_dir: Path) -> list[FrameInput]:
     """List already extracted frames with ids derived from their filenames."""
     frame_dir = Path(frame_dir).resolve()

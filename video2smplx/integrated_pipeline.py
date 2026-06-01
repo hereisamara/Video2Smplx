@@ -7,11 +7,12 @@ then performs body/hand/face inference and fusion per frame in memory.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import pickle
 from pathlib import Path
 
-from video2smplx.frames import extract_frames_cv2, list_frames
+from video2smplx.frames import extract_frames_cv2, iter_video_frames_cv2, list_frames
 from video2smplx.fusion import FusionStats, fuse_frame, validate_person
 
 
@@ -50,6 +51,7 @@ def run_integrated_pipeline(
     fps: int = 30,
     reuse_frames: bool = False,
     frames_dir: Path | None = None,
+    materialize_frames: bool = False,
     smplestx_ckpt: str = "smplest_x_h",
     emoca_model: str = "EMOCA_v2_lr_mse_20",
     device: str = "cuda",
@@ -76,12 +78,23 @@ def run_integrated_pipeline(
     fused_dir.mkdir(parents=True, exist_ok=True)
     if reuse_frames:
         frames = list_frames(frames_dir)
-    else:
+        frame_iterable = frames
+        frame_count = len(frames)
+        frame_source = str(frames_dir)
+        if not frames:
+            raise RuntimeError(f"No frames available in: {frames_dir}")
+    elif materialize_frames:
         _clear_frame_dir(frames_dir)
         frames = extract_frames_cv2(video, frames_dir, fps=fps)
-
-    if not frames:
-        raise RuntimeError(f"No frames available in: {frames_dir}")
+        frame_iterable = frames
+        frame_count = len(frames)
+        frame_source = str(frames_dir)
+        if not frames:
+            raise RuntimeError(f"No frames extracted from: {video}")
+    else:
+        frame_iterable = iter_video_frames_cv2(video, fps=fps)
+        frame_count = None
+        frame_source = "in-memory video stream"
 
     print("\n" + "#" * 72)
     print("  INTEGRATED VIDEO2SMPLX PIPELINE")
@@ -89,7 +102,10 @@ def run_integrated_pipeline(
     print(f"  name       : {run_name}")
     print(f"  video      : {video}")
     print(f"  output     : {output}")
-    print(f"  frames     : {frames_dir} ({len(frames)} frames)")
+    if frame_count is None:
+        print(f"  frames     : {frame_source}")
+    else:
+        print(f"  frames     : {frame_source} ({frame_count} frames)")
     print(f"  device     : {device}")
     print("#" * 72)
 
@@ -109,15 +125,16 @@ def run_integrated_pipeline(
     print("\n[load] EMOCA")
     emoca = EMOCARunner(EMOCA_DIR, model_name=emoca_model, device=device)
 
-    stats = FusionStats(total_frames=len(frames))
+    stats = FusionStats()
+    fused_outputs: list[tuple[str, list]] = []
 
-    for frame in tqdm(frames, desc="Integrated inference"):
-        dst = fused_dir / f"{frame.frame_id:06d}_params.pkl"
+    for frame in tqdm(frame_iterable, total=frame_count, desc="Integrated inference"):
+        stats.total_frames += 1
+        out_name = f"{frame.frame_id:06d}_params.pkl"
         try:
             body = smplestx.predict(frame)
             if not body:
-                with open(dst, "wb") as f:
-                    pickle.dump([], f)
+                fused_outputs.append((out_name, []))
                 stats.empty_smplestx_frames += 1
                 continue
 
@@ -138,38 +155,53 @@ def run_integrated_pipeline(
             if validation_errors:
                 stats.validation_errors += len(validation_errors)
                 stats.warnings.append(
-                    f"{frame.frame_id:06d}_params.pkl: {'; '.join(validation_errors)}"
+                    f"{out_name}: {'; '.join(validation_errors)}"
                 )
 
-            with open(dst, "wb") as f:
-                pickle.dump(fused, f)
+            fused_outputs.append((out_name, fused))
         except Exception as exc:
             stats.errors += 1
             stats.warnings.append(f"{frame.frame_id:06d}: {exc}")
-            with open(dst, "wb") as f:
-                pickle.dump([], f)
+            fused_outputs.append((out_name, []))
+
+    if stats.total_frames == 0:
+        raise RuntimeError(f"No frames decoded from: {video}")
+
+    for out_name, fused in fused_outputs:
+        with open(fused_dir / out_name, "wb") as f:
+            pickle.dump(fused, f)
 
     with open(report_path, "w") as f:
         json.dump(stats.to_dict(), f, indent=2)
 
     final_video = rendered_dir / "smplest_wilor_emoca.mp4"
     if not skip_render:
-        from zero_filter_render import run_pipeline as run_render_pipeline
+        from zero_filter_render import (
+            stage_render as render_smplx_video,
+            stage_smooth,
+            stage_zero_transl,
+        )
 
         rendered_dir.mkdir(parents=True, exist_ok=True)
-        run_render_pipeline(
-            input_pkl_folder=str(fused_dir),
+        render_data = copy.deepcopy([fused for _, fused in fused_outputs])
+        render_data = stage_zero_transl(render_data)
+        render_data = stage_smooth(render_data, smooth_window, smooth_poly)
+        params_out_dir = rendered_dir / "params"
+        params_out_dir.mkdir(parents=True, exist_ok=True)
+        for (out_name, _), data in zip(fused_outputs, render_data):
+            with open(params_out_dir / out_name, "wb") as f:
+                pickle.dump(data, f)
+        render_smplx_video(
+            all_data=render_data,
             smplx_model_path=str(smplx_model),
-            output_dir=str(rendered_dir),
-            smooth_window_length=smooth_window,
-            smooth_polyorder=smooth_poly,
+            output_video_path=str(final_video),
             video_fps=fps,
             viewport_size=viewport,
         )
 
     summary = {
         "name": run_name,
-        "frames": len(frames),
+        "frames": stats.total_frames,
         "output": str(output),
         "fused_params": str(fused_dir),
         "fusion_report": str(report_path),
@@ -197,6 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fps", type=int, default=30, help="Extraction/output FPS.")
     parser.add_argument("--frames_dir", default=None, help="Optional extracted frame directory.")
     parser.add_argument("--reuse_frames", action="store_true", help="Use --frames_dir instead of extracting.")
+    parser.add_argument(
+        "--materialize_frames",
+        action="store_true",
+        help="Write decoded frames to --frames_dir before inference. Default streams frames in memory.",
+    )
     parser.add_argument("--smplestx_ckpt", default="smplest_x_h", help="SMPLest-X checkpoint name.")
     parser.add_argument("--emoca_model", default="EMOCA_v2_lr_mse_20", help="EMOCA model name.")
     parser.add_argument("--device", default="cuda", help="Device for model inference.")
@@ -218,6 +255,7 @@ def main() -> None:
         fps=args.fps,
         reuse_frames=args.reuse_frames,
         frames_dir=Path(args.frames_dir) if args.frames_dir else None,
+        materialize_frames=args.materialize_frames,
         smplestx_ckpt=args.smplestx_ckpt,
         emoca_model=args.emoca_model,
         device=args.device,

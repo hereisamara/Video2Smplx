@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from video2smplx.contracts import FrameInput
-from video2smplx.runners._runtime import add_project_to_path, project_cwd
+from video2smplx.runners._runtime import add_project_to_path, project_cwd, require_files
 
 
 class EMOCARunner:
@@ -30,6 +30,27 @@ class EMOCARunner:
         self.crop_size = crop_size
         self.scale = scale
         self.device = torch.device(device if device == "cuda" and torch.cuda.is_available() else "cpu")
+        path_to_models = self.project_dir / "assets" / "EMOCA" / "models"
+        checkpoint_dir = path_to_models / model_name / "detail" / "checkpoints"
+        require_files(
+            [
+                path_to_models / model_name / "cfg.yaml",
+                self.project_dir / "assets" / "DECA" / "data" / "deca_model.tar",
+                self.project_dir / "assets" / "FLAME" / "geometry" / "generic_model.pkl",
+                self.project_dir / "assets" / "FLAME" / "geometry" / "landmark_embedding.npy",
+                self.project_dir / "assets" / "FLAME" / "geometry" / "mediapipe_landmark_embedding.npz",
+                self.project_dir / "assets" / "FLAME" / "geometry" / "head_template.obj",
+                self.project_dir / "assets" / "FLAME" / "geometry" / "fixed_uv_displacements" / "fixed_displacement_256.npy",
+                self.project_dir / "assets" / "FLAME" / "mask" / "uv_face_mask.png",
+                self.project_dir / "assets" / "FLAME" / "mask" / "uv_face_eye_mask.png",
+            ],
+            "EMOCA",
+        )
+        if not checkpoint_dir.exists() or not list(checkpoint_dir.glob("*.ckpt")):
+            raise FileNotFoundError(
+                "EMOCA checkpoint is missing:\n"
+                f"  - expected at least one *.ckpt in {checkpoint_dir}"
+            )
 
         add_project_to_path(self.project_dir)
         with project_cwd(self.project_dir):
@@ -42,7 +63,6 @@ class EMOCARunner:
             self.estimate_transform = estimate_transform
             self.warp = warp
 
-            path_to_models = self.project_dir / "assets" / "EMOCA" / "models"
             self.emoca, self.conf = load_model(path_to_models, model_name, "detail")
             self.emoca = self.emoca.to(self.device)
             self.emoca.eval()
@@ -106,7 +126,13 @@ class EMOCARunner:
         return value
 
     def predict(self, frame: FrameInput) -> dict[str, Any]:
-        image_bgr = cv2.imread(str(frame.path))
+        if frame.image_bgr is not None:
+            image_bgr = frame.image_bgr
+        elif frame.path is not None:
+            image_bgr = cv2.imread(str(frame.path))
+        else:
+            raise ValueError("FrameInput must contain either image_bgr or path.")
+
         if image_bgr is None:
             raise FileNotFoundError(f"Could not read frame: {frame.path}")
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
@@ -138,4 +164,3 @@ class EMOCARunner:
         result["light"] = self._numpy(vals, "lightcode")
         result["tex"] = self._numpy(vals, "texcode")
         return result
-

@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 from video2smplx.contracts import FrameInput
-from video2smplx.runners._runtime import add_project_to_path, project_cwd
+from video2smplx.runners._runtime import add_project_to_path, project_cwd, require_files
 
 
 class WiLoRRunner:
@@ -26,6 +26,16 @@ class WiLoRRunner:
         self.device_name = device
         self.rescale_factor = rescale_factor
         self.batch_size = batch_size
+        require_files(
+            [
+                self.project_dir / "pretrained_models" / "wilor_final.ckpt",
+                self.project_dir / "pretrained_models" / "detector.pt",
+                self.project_dir / "pretrained_models" / "model_config.yaml",
+                self.project_dir / "mano_data" / "mano_mean_params.npz",
+                self.project_dir / "mano_data" / "MANO_RIGHT.pkl",
+            ],
+            "WiLoR",
+        )
 
         add_project_to_path(self.project_dir)
         with project_cwd(self.project_dir):
@@ -63,7 +73,13 @@ class WiLoRRunner:
         }
 
     def predict(self, frame: FrameInput) -> dict[str, Any]:
-        img_cv2 = cv2.imread(str(frame.path))
+        if frame.image_bgr is not None:
+            img_cv2 = frame.image_bgr.copy()
+        elif frame.path is not None:
+            img_cv2 = cv2.imread(str(frame.path))
+        else:
+            raise ValueError("FrameInput must contain either image_bgr or path.")
+
         if img_cv2 is None:
             raise FileNotFoundError(f"Could not read frame: {frame.path}")
 
@@ -128,4 +144,3 @@ class WiLoRRunner:
                     frame_params["left_hand_global_orient"] = wrist_aa * reflection_vector
 
         return frame_params
-

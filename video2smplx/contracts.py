@@ -10,7 +10,8 @@ from typing import Any
 @dataclass(frozen=True)
 class FrameInput:
     frame_id: int
-    path: Path
+    path: Path | None = None
+    image_bgr: Any | None = None
 
 
 @dataclass
@@ -20,4 +21,3 @@ class FramePrediction:
     hands: dict[str, Any]
     face: dict[str, Any]
     fused: list[Any]
-

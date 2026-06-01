@@ -353,8 +353,9 @@ pretrained-models section above.
 ### Run the Integrated One-Process Pipeline
 
 This is the preferred path for the combined system. SMPLest-X, WiLoR, and
-EMOCA are loaded once as Python runner objects, predictions stay in memory per
-frame, and only the final fused SMPL-X params are written.
+EMOCA are loaded once as Python runner objects. By default, video frames are
+decoded as in-memory arrays, predictions stay in memory per frame, fusion runs
+immediately, and fused params are written only as final outputs.
 
 ```bash
 conda run --no-capture-output -n video2smplx_shared310 python -m video2smplx.integrated_pipeline \
@@ -371,6 +372,16 @@ conda run --no-capture-output -n video2smplx_shared310 python -m video2smplx.int
     --output outputs/P \
     --device cuda \
     --skip_render
+```
+
+To debug with a materialized frame folder, opt in explicitly:
+
+```bash
+conda run --no-capture-output -n video2smplx_shared310 python -m video2smplx.integrated_pipeline \
+    --video  demo/P.mp4 \
+    --output outputs/P \
+    --device cuda \
+    --materialize_frames
 ```
 
 ### Run the Legacy File-Based Pipeline

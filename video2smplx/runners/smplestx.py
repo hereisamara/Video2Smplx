@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from video2smplx.contracts import FrameInput
-from video2smplx.runners._runtime import add_project_to_path, project_cwd
+from video2smplx.runners._runtime import add_project_to_path, project_cwd, require_files
 
 
 class SmplestXRunner:
@@ -31,6 +31,7 @@ class SmplestXRunner:
         with project_cwd(self.project_dir):
             import torch
             import torchvision.transforms as transforms
+            from human_models.human_models import SMPLX
             from main.base import Tester
             from main.config import Config
             from ultralytics import YOLO
@@ -59,6 +60,20 @@ class SmplestXRunner:
             )
             detector_path = self.project_dir / "pretrained_models" / "yolov8x.pt"
             human_model_path = self.project_dir / "human_models" / "human_model_files"
+            require_files(
+                [
+                    config_path,
+                    checkpoint_path,
+                    detector_path,
+                    human_model_path / "smplx" / "SMPLX_NEUTRAL.npz",
+                    human_model_path / "smplx" / "SMPLX_MALE.npz",
+                    human_model_path / "smplx" / "SMPLX_FEMALE.npz",
+                    human_model_path / "smplx" / "SMPLX_to_J14.pkl",
+                    human_model_path / "smplx" / "MANO_SMPLX_vertex_ids.pkl",
+                    human_model_path / "smplx" / "SMPL-X__FLAME_vertex_ids.npy",
+                ],
+                "SMPLest-X",
+            )
 
             cfg = Config.load_config(str(config_path))
             exp_name = (
@@ -87,16 +102,26 @@ class SmplestXRunner:
             )
             cfg.prepare_log()
             self.cfg = cfg
+            # SMPLest-X model construction calls SMPLX() without arguments in
+            # TransformerDecoderHead, so initialize the singleton first.
+            self.smpl_x = SMPLX(cfg.model.human_model_path)
             self.demoer = Tester(cfg)
             self.demoer.logger.info("Integrated SMPLest-X runner loading model.")
             self.demoer._make_model()
             self.detector = YOLO(str(detector_path))
             self.transform = transforms.ToTensor()
 
+    def _load_original_img(self, frame: FrameInput) -> np.ndarray:
+        if frame.image_bgr is not None:
+            return frame.image_bgr[:, :, ::-1].copy().astype(np.float32)
+        if frame.path is None:
+            raise ValueError("FrameInput must contain either image_bgr or path.")
+        return self.load_img(str(frame.path))
+
     def predict(self, frame: FrameInput) -> list[dict[str, Any]]:
         """Return SMPL-X parameter dictionaries for the detected people."""
         torch = self.torch
-        original_img = self.load_img(str(frame.path))
+        original_img = self._load_original_img(frame)
         original_img_height, original_img_width = original_img.shape[:2]
 
         detections = self.detector.predict(
