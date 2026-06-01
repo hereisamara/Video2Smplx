@@ -45,6 +45,40 @@ def _has_face_data(face: dict) -> bool:
     return face.get("exp") is not None or face.get("jaw_pose") is not None
 
 
+def _is_valid_fused_frame(frame_data: list) -> bool:
+    return bool(frame_data and isinstance(frame_data[0], dict))
+
+
+def _warning_sample(warnings: list[str], limit: int = 8) -> str:
+    if not warnings:
+        return "none"
+    shown = warnings[:limit]
+    suffix = ""
+    if len(warnings) > limit:
+        suffix = f"\n  ... {len(warnings) - limit} more warnings in fusion_report.json"
+    return "\n  " + "\n  ".join(shown) + suffix
+
+
+def _effective_smooth_window(
+    requested_window: int,
+    valid_frames: int,
+    polyorder: int,
+) -> int | None:
+    if valid_frames <= polyorder:
+        return None
+
+    window = min(requested_window, valid_frames)
+    if window % 2 == 0:
+        window -= 1
+    if window <= polyorder:
+        window = polyorder + 1
+        if window % 2 == 0:
+            window += 1
+    if window > valid_frames:
+        return None
+    return window
+
+
 def run_integrated_pipeline(
     video: Path,
     output: Path,
@@ -184,7 +218,7 @@ def run_integrated_pipeline(
             fused_outputs.append((out_name, fused))
         except Exception as exc:
             stats.errors += 1
-            stats.warnings.append(f"{frame.frame_id:06d}: {exc}")
+            stats.warnings.append(f"{frame.frame_id:06d}: {type(exc).__name__}: {exc}")
             fused_outputs.append((out_name, []))
 
     if stats.total_frames == 0:
@@ -197,6 +231,24 @@ def run_integrated_pipeline(
     with open(report_path, "w") as f:
         json.dump(stats.to_dict(), f, indent=2)
 
+    valid_fused_frames = sum(
+        1 for _, fused in fused_outputs if _is_valid_fused_frame(fused)
+    )
+    print("\n[fusion]")
+    print(f"  Frames decoded     : {stats.total_frames}")
+    print(f"  Valid fused frames : {valid_fused_frames}")
+    print(f"  Empty body frames  : {stats.empty_smplestx_frames}")
+    print(f"  Frame errors       : {stats.errors}")
+    print(f"  Fusion report      : {report_path}")
+
+    if valid_fused_frames == 0:
+        raise RuntimeError(
+            "Integrated inference produced 0 valid fused frames, so render/smooth was not run.\n"
+            f"Fusion report: {report_path}\n"
+            "First recorded warnings/errors:"
+            f"{_warning_sample(stats.warnings)}"
+        )
+
     final_video = rendered_dir / "smplest_wilor_emoca.mp4"
     if not skip_render:
         from zero_filter_render import (
@@ -208,7 +260,28 @@ def run_integrated_pipeline(
         rendered_dir.mkdir(parents=True, exist_ok=True)
         render_data = copy.deepcopy([fused for _, fused in fused_outputs])
         render_data = stage_zero_transl(render_data)
-        render_data = stage_smooth(render_data, smooth_window, smooth_poly)
+        effective_smooth_window = _effective_smooth_window(
+            smooth_window,
+            valid_fused_frames,
+            smooth_poly,
+        )
+        if effective_smooth_window is None:
+            print(
+                "\n[render] Skipping smoothing because there are not enough "
+                f"valid frames ({valid_fused_frames}) for polyorder={smooth_poly}."
+            )
+        else:
+            if effective_smooth_window != smooth_window:
+                print(
+                    "\n[render] Adjusting smooth_window from "
+                    f"{smooth_window} to {effective_smooth_window} for "
+                    f"{valid_fused_frames} valid frames."
+                )
+            render_data = stage_smooth(
+                render_data,
+                effective_smooth_window,
+                smooth_poly,
+            )
         params_out_dir = rendered_dir / "params"
         params_out_dir.mkdir(parents=True, exist_ok=True)
         for (out_name, _), data in zip(fused_outputs, render_data):
@@ -229,6 +302,7 @@ def run_integrated_pipeline(
         "fused_params": str(fused_dir),
         "fusion_report": str(report_path),
         "rendered_video": str(final_video) if not skip_render else None,
+        "valid_fused_frames": valid_fused_frames,
         "stats": stats.to_dict(),
         "lower_body_stabilization": {
             "enabled": stabilize_lower_body,
