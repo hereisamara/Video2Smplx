@@ -15,13 +15,14 @@ from video2smplx.fusion import flattened_array
 # Spine_3, L_Foot, R_Foot, Neck, L_Collar, R_Collar, Head,
 # L_Shoulder, R_Shoulder, L_Elbow, R_Elbow, L_Wrist, R_Wrist.
 LOWER_BODY_JOINT_INDICES = (0, 1, 3, 4, 6, 7, 9, 10)
+TORSO_JOINT_INDICES = (2, 5, 8)
 
 
 @dataclass
-class LowerBodyStabilizer:
-    """Keep lower-body SMPL-X body_pose joints fixed from the first valid frame."""
+class BodyPoseJointStabilizer:
+    """Keep selected SMPL-X body_pose joints fixed from the first valid frame."""
 
-    joint_indices: tuple[int, ...] = LOWER_BODY_JOINT_INDICES
+    joint_indices: tuple[int, ...]
     reference_pose: np.ndarray | None = None
     reference_frame_id: int | None = None
     applied_frames: int = 0
@@ -45,6 +46,20 @@ class LowerBodyStabilizer:
         people[0]["body_pose"] = pose_21x3.reshape(-1)
         self.applied_frames += 1
         return people
+
+
+@dataclass
+class LowerBodyStabilizer(BodyPoseJointStabilizer):
+    """Keep lower-body SMPL-X body_pose joints fixed from the first valid frame."""
+
+    joint_indices: tuple[int, ...] = LOWER_BODY_JOINT_INDICES
+
+
+@dataclass
+class TorsoStabilizer(BodyPoseJointStabilizer):
+    """Keep torso/spine SMPL-X body_pose joints fixed from the first valid frame."""
+
+    joint_indices: tuple[int, ...] = TORSO_JOINT_INDICES
 
 
 @dataclass

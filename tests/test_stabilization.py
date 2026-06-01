@@ -4,8 +4,10 @@ import numpy as np
 
 from video2smplx.stabilization import (
     LOWER_BODY_JOINT_INDICES,
+    TORSO_JOINT_INDICES,
     GlobalOrientStabilizer,
     LowerBodyStabilizer,
+    TorsoStabilizer,
 )
 
 
@@ -54,6 +56,29 @@ class GlobalOrientStabilizerTest(unittest.TestCase):
         stabilizer.apply(second, frame_id=2)
 
         self.assertTrue(np.allclose(second[0]["global_orient"], first[0]["global_orient"]))
+        self.assertEqual(stabilizer.reference_frame_id, 1)
+        self.assertEqual(stabilizer.applied_frames, 1)
+
+
+class TorsoStabilizerTest(unittest.TestCase):
+    def test_freezes_only_spine_joints_after_first_valid_frame(self):
+        stabilizer = TorsoStabilizer()
+        first_pose = np.arange(63, dtype=np.float32)
+        second_pose = np.full(63, 100.0, dtype=np.float32)
+
+        first = [{"body_pose": first_pose.copy()}]
+        second = [{"body_pose": second_pose.copy()}]
+
+        stabilizer.apply(first, frame_id=1)
+        stabilizer.apply(second, frame_id=2)
+
+        second_21x3 = second[0]["body_pose"].reshape(21, 3)
+        first_21x3 = first_pose.reshape(21, 3)
+        for joint_idx in TORSO_JOINT_INDICES:
+            self.assertTrue(np.allclose(second_21x3[joint_idx], first_21x3[joint_idx]))
+
+        shoulder_joint_idx = 15
+        self.assertTrue(np.allclose(second_21x3[shoulder_joint_idx], 100.0))
         self.assertEqual(stabilizer.reference_frame_id, 1)
         self.assertEqual(stabilizer.applied_frames, 1)
 

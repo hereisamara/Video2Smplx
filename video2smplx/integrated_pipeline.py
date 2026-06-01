@@ -14,7 +14,11 @@ from pathlib import Path
 
 from video2smplx.frames import extract_frames_cv2, iter_video_frames_cv2, list_frames
 from video2smplx.fusion import FusionStats, fuse_frame, validate_person
-from video2smplx.stabilization import GlobalOrientStabilizer, LowerBodyStabilizer
+from video2smplx.stabilization import (
+    GlobalOrientStabilizer,
+    LowerBodyStabilizer,
+    TorsoStabilizer,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,6 +105,7 @@ def run_integrated_pipeline(
     emoca_dir: Path = EMOCA_DIR,
     stabilize_lower_body: bool = False,
     stabilize_global_orient: bool = False,
+    stabilize_torso: bool = False,
 ) -> dict:
     from tqdm import tqdm
 
@@ -163,6 +168,7 @@ def run_integrated_pipeline(
     print(f"  device     : {device}")
     print(f"  lower body : {'first-frame stabilized' if stabilize_lower_body else 'dynamic'}")
     print(f"  root orient: {'first-frame stabilized' if stabilize_global_orient else 'dynamic'}")
+    print(f"  torso      : {'first-frame stabilized' if stabilize_torso else 'dynamic'}")
     print("#" * 72)
 
     from video2smplx.runners.emoca import EMOCARunner
@@ -187,6 +193,7 @@ def run_integrated_pipeline(
     global_orient_stabilizer = (
         GlobalOrientStabilizer() if stabilize_global_orient else None
     )
+    torso_stabilizer = TorsoStabilizer() if stabilize_torso else None
 
     for frame in tqdm(frame_iterable, total=frame_count, desc="Integrated inference"):
         stats.total_frames += 1
@@ -201,6 +208,8 @@ def run_integrated_pipeline(
                 body = lower_body_stabilizer.apply(body, frame.frame_id)
             if global_orient_stabilizer is not None:
                 body = global_orient_stabilizer.apply(body, frame.frame_id)
+            if torso_stabilizer is not None:
+                body = torso_stabilizer.apply(body, frame.frame_id)
 
             hands = wilor.predict(frame)
             if _has_hand_data(hands):
@@ -247,6 +256,12 @@ def run_integrated_pipeline(
     print(f"  Empty body frames  : {stats.empty_smplestx_frames}")
     print(f"  Frame errors       : {stats.errors}")
     print(f"  Fusion report      : {report_path}")
+    if lower_body_stabilizer is not None:
+        print(f"  Lower-body fixed   : {lower_body_stabilizer.applied_frames} frames")
+    if global_orient_stabilizer is not None:
+        print(f"  Root orient fixed  : {global_orient_stabilizer.applied_frames} frames")
+    if torso_stabilizer is not None:
+        print(f"  Torso fixed        : {torso_stabilizer.applied_frames} frames")
 
     if valid_fused_frames == 0:
         raise RuntimeError(
@@ -337,6 +352,19 @@ def run_integrated_pipeline(
                 else 0
             ),
         },
+        "torso_stabilization": {
+            "enabled": stabilize_torso,
+            "reference_frame_id": (
+                torso_stabilizer.reference_frame_id
+                if torso_stabilizer is not None
+                else None
+            ),
+            "applied_frames": (
+                torso_stabilizer.applied_frames
+                if torso_stabilizer is not None
+                else 0
+            ),
+        },
     }
     print("\n" + "#" * 72)
     print("  INTEGRATED PIPELINE COMPLETE")
@@ -381,6 +409,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Hold primary person's SMPL-X root/global orientation from the first valid frame.",
     )
+    parser.add_argument(
+        "--stabilize_torso",
+        action="store_true",
+        help="Hold primary person's SMPL-X spine body_pose joints from the first valid frame.",
+    )
     parser.add_argument("--skip_render", action="store_true", help="Only write fused params.")
     parser.add_argument("--smplx_model", default=str(DEFAULT_SMPLX_MODEL), help="SMPL-X model path for render.")
     parser.add_argument("--smooth_window", type=int, default=15)
@@ -413,6 +446,7 @@ def main() -> None:
         emoca_dir=Path(args.emoca_dir),
         stabilize_lower_body=args.stabilize_lower_body,
         stabilize_global_orient=args.stabilize_global_orient,
+        stabilize_torso=args.stabilize_torso,
     )
 
 
