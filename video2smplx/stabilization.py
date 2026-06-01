@@ -34,14 +34,14 @@ class LowerBodyStabilizer:
         if body_pose.shape[0] != 63:
             return people
 
+        joint_indices = list(self.joint_indices)
         pose_21x3 = body_pose.reshape(21, 3).copy()
         if self.reference_pose is None:
-            self.reference_pose = pose_21x3[self.joint_indices].copy()
+            self.reference_pose = pose_21x3[joint_indices].copy()
             self.reference_frame_id = frame_id
             return people
 
-        pose_21x3[list(self.joint_indices)] = self.reference_pose
+        pose_21x3[joint_indices] = self.reference_pose
         people[0]["body_pose"] = pose_21x3.reshape(-1)
         self.applied_frames += 1
         return people
-

@@ -6,6 +6,18 @@ from video2smplx.stabilization import LOWER_BODY_JOINT_INDICES, LowerBodyStabili
 
 
 class LowerBodyStabilizerTest(unittest.TestCase):
+    def test_captures_first_frame_reference_pose(self):
+        stabilizer = LowerBodyStabilizer()
+        first_pose = np.arange(63, dtype=np.float32)
+
+        people = [{"body_pose": first_pose.copy()}]
+
+        stabilizer.apply(people, frame_id=1)
+
+        expected = first_pose.reshape(21, 3)[list(LOWER_BODY_JOINT_INDICES)]
+        self.assertTrue(np.allclose(stabilizer.reference_pose, expected))
+        self.assertEqual(stabilizer.reference_frame_id, 1)
+
     def test_freezes_only_lower_body_joints_after_first_valid_frame(self):
         stabilizer = LowerBodyStabilizer()
         first_pose = np.arange(63, dtype=np.float32)
@@ -30,4 +42,3 @@ class LowerBodyStabilizerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
