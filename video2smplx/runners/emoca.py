@@ -48,7 +48,7 @@ class EMOCARunner:
         )
         checkpoints = []
         if checkpoint_dir.exists():
-            checkpoints = list(checkpoint_dir.glob("*.ckpt"))
+            checkpoints = list(checkpoint_dir.rglob("*.ckpt"))
             if not checkpoints:
                 checkpoints = [
                     path
