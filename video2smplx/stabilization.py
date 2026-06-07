@@ -86,3 +86,29 @@ class GlobalOrientStabilizer:
         people[0]["global_orient"] = self.reference_orient.copy()
         self.applied_frames += 1
         return people
+
+
+@dataclass
+class ShapeStabilizer:
+    """Keep SMPL-X body shape coefficients fixed from the first valid frame."""
+
+    reference_betas: np.ndarray | None = None
+    reference_frame_id: int | None = None
+    applied_frames: int = 0
+
+    def apply(self, people: list[dict[str, Any]], frame_id: int | None = None) -> list[dict[str, Any]]:
+        if not people or not isinstance(people[0], dict) or "betas" not in people[0]:
+            return people
+
+        betas = flattened_array(people[0]["betas"])
+        if betas.shape[0] != 10:
+            return people
+
+        if self.reference_betas is None:
+            self.reference_betas = betas.copy()
+            self.reference_frame_id = frame_id
+            return people
+
+        people[0]["betas"] = self.reference_betas.copy()
+        self.applied_frames += 1
+        return people

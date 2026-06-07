@@ -7,6 +7,7 @@ from video2smplx.stabilization import (
     TORSO_JOINT_INDICES,
     GlobalOrientStabilizer,
     LowerBodyStabilizer,
+    ShapeStabilizer,
     TorsoStabilizer,
 )
 
@@ -79,6 +80,20 @@ class TorsoStabilizerTest(unittest.TestCase):
 
         shoulder_joint_idx = 15
         self.assertTrue(np.allclose(second_21x3[shoulder_joint_idx], 100.0))
+        self.assertEqual(stabilizer.reference_frame_id, 1)
+        self.assertEqual(stabilizer.applied_frames, 1)
+
+
+class ShapeStabilizerTest(unittest.TestCase):
+    def test_freezes_betas_after_first_valid_frame(self):
+        stabilizer = ShapeStabilizer()
+        first = [{"betas": np.arange(10, dtype=np.float32)}]
+        second = [{"betas": np.full(10, 100.0, dtype=np.float32)}]
+
+        stabilizer.apply(first, frame_id=1)
+        stabilizer.apply(second, frame_id=2)
+
+        self.assertTrue(np.allclose(second[0]["betas"], first[0]["betas"]))
         self.assertEqual(stabilizer.reference_frame_id, 1)
         self.assertEqual(stabilizer.applied_frames, 1)
 

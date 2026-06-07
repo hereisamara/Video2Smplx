@@ -17,6 +17,7 @@ from video2smplx.fusion import FusionStats, fuse_frame, validate_person
 from video2smplx.stabilization import (
     GlobalOrientStabilizer,
     LowerBodyStabilizer,
+    ShapeStabilizer,
     TorsoStabilizer,
 )
 
@@ -106,6 +107,7 @@ def run_integrated_pipeline(
     stabilize_lower_body: bool = False,
     stabilize_global_orient: bool = False,
     stabilize_torso: bool = False,
+    stabilize_shape: bool = False,
 ) -> dict:
     from tqdm import tqdm
 
@@ -169,6 +171,7 @@ def run_integrated_pipeline(
     print(f"  lower body : {'first-frame stabilized' if stabilize_lower_body else 'dynamic'}")
     print(f"  root orient: {'first-frame stabilized' if stabilize_global_orient else 'dynamic'}")
     print(f"  torso      : {'first-frame stabilized' if stabilize_torso else 'dynamic'}")
+    print(f"  shape      : {'first-frame stabilized' if stabilize_shape else 'dynamic'}")
     print("#" * 72)
 
     from video2smplx.runners.emoca import EMOCARunner
@@ -194,6 +197,7 @@ def run_integrated_pipeline(
         GlobalOrientStabilizer() if stabilize_global_orient else None
     )
     torso_stabilizer = TorsoStabilizer() if stabilize_torso else None
+    shape_stabilizer = ShapeStabilizer() if stabilize_shape else None
 
     for frame in tqdm(frame_iterable, total=frame_count, desc="Integrated inference"):
         stats.total_frames += 1
@@ -210,6 +214,8 @@ def run_integrated_pipeline(
                 body = global_orient_stabilizer.apply(body, frame.frame_id)
             if torso_stabilizer is not None:
                 body = torso_stabilizer.apply(body, frame.frame_id)
+            if shape_stabilizer is not None:
+                body = shape_stabilizer.apply(body, frame.frame_id)
 
             hands = wilor.predict(frame)
             if _has_hand_data(hands):
@@ -262,6 +268,8 @@ def run_integrated_pipeline(
         print(f"  Root orient fixed  : {global_orient_stabilizer.applied_frames} frames")
     if torso_stabilizer is not None:
         print(f"  Torso fixed        : {torso_stabilizer.applied_frames} frames")
+    if shape_stabilizer is not None:
+        print(f"  Shape fixed        : {shape_stabilizer.applied_frames} frames")
 
     if valid_fused_frames == 0:
         raise RuntimeError(
@@ -365,6 +373,19 @@ def run_integrated_pipeline(
                 else 0
             ),
         },
+        "shape_stabilization": {
+            "enabled": stabilize_shape,
+            "reference_frame_id": (
+                shape_stabilizer.reference_frame_id
+                if shape_stabilizer is not None
+                else None
+            ),
+            "applied_frames": (
+                shape_stabilizer.applied_frames
+                if shape_stabilizer is not None
+                else 0
+            ),
+        },
     }
     print("\n" + "#" * 72)
     print("  INTEGRATED PIPELINE COMPLETE")
@@ -414,6 +435,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Hold primary person's SMPL-X spine body_pose joints from the first valid frame.",
     )
+    parser.add_argument(
+        "--stabilize_shape",
+        action="store_true",
+        help="Hold primary person's SMPL-X shape coefficients from the first valid frame.",
+    )
     parser.add_argument("--skip_render", action="store_true", help="Only write fused params.")
     parser.add_argument("--smplx_model", default=str(DEFAULT_SMPLX_MODEL), help="SMPL-X model path for render.")
     parser.add_argument("--smooth_window", type=int, default=15)
@@ -447,6 +473,7 @@ def main() -> None:
         stabilize_lower_body=args.stabilize_lower_body,
         stabilize_global_orient=args.stabilize_global_orient,
         stabilize_torso=args.stabilize_torso,
+        stabilize_shape=args.stabilize_shape,
     )
 
 
