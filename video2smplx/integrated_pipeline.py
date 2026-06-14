@@ -78,6 +78,17 @@ def _timing_average(total_seconds: float, count: int) -> float | None:
     return total_seconds / count
 
 
+def _iter_batches(iterable, batch_size: int):
+    batch = []
+    for item in iterable:
+        batch.append(item)
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
 def _effective_smooth_window(
     requested_window: int,
     valid_frames: int,
@@ -122,9 +133,14 @@ def run_integrated_pipeline(
     stabilize_global_orient: bool = False,
     stabilize_torso: bool = False,
     stabilize_shape: bool = False,
+    smplestx_detector_stride: int = 1,
+    smplestx_batch_size: int = 1,
+    smplestx_inference_mode: bool = False,
+    smplestx_single_gpu_model: bool = False,
 ) -> dict:
     from tqdm import tqdm
 
+    pipeline_start = time.perf_counter()
     video = Path(video).resolve()
     output = Path(output).resolve()
     smplestx_dir = Path(smplestx_dir).resolve()
@@ -187,6 +203,10 @@ def run_integrated_pipeline(
     print(f"  root orient: {'first-frame stabilized' if stabilize_global_orient else 'dynamic'}")
     print(f"  torso      : {'first-frame stabilized' if stabilize_torso else 'dynamic'}")
     print(f"  shape      : {'first-frame stabilized' if stabilize_shape else 'dynamic'}")
+    print(f"  sx det str : {max(1, smplestx_detector_stride)}")
+    print(f"  sx batch   : {max(1, smplestx_batch_size)}")
+    print(f"  sx infer   : {'inference_mode' if smplestx_inference_mode else 'no_grad'}")
+    print(f"  sx model   : {'single GPU module' if smplestx_single_gpu_model else 'DataParallel wrapper'}")
     print("#" * 72)
 
     from video2smplx.runners.emoca import EMOCARunner
@@ -199,6 +219,10 @@ def run_integrated_pipeline(
         ckpt_name=smplestx_ckpt,
         device=device,
         multi_person=multi_person,
+        detector_stride=smplestx_detector_stride,
+        use_inference_mode=smplestx_inference_mode,
+        single_gpu_model=smplestx_single_gpu_model,
+        model_batch_size=smplestx_batch_size,
     )
     print("\n[load] WiLoR")
     wilor = WiLoRRunner(wilor_dir, device=device)
@@ -216,94 +240,123 @@ def run_integrated_pipeline(
     )
     torso_stabilizer = TorsoStabilizer() if stabilize_torso else None
     shape_stabilizer = ShapeStabilizer() if stabilize_shape else None
+    smplestx_batch_size = max(1, smplestx_batch_size)
 
-    for frame in tqdm(frame_iterable, total=frame_count, desc="Integrated inference"):
-        stats.total_frames += 1
-        out_name = f"{frame.frame_id:06d}_params.pkl"
-        frame_timings: dict[str, float | None] = {
-            key: None for key in MODEL_TIMING_KEYS
-        }
-        frame_start = time.perf_counter()
-        frame_status = "ok"
-        try:
-            model_start = time.perf_counter()
+    inference_start = time.perf_counter()
+    progress = tqdm(total=frame_count, desc="Integrated inference")
+    try:
+        for frame_batch in _iter_batches(frame_iterable, smplestx_batch_size):
+            batch_start = time.perf_counter()
+            batch_error: Exception | None = None
             try:
-                body = smplestx.predict(frame)
-            finally:
-                frame_timings["smplestx"] = time.perf_counter() - model_start
-            if not body:
-                frame_status = "empty_smplestx"
-                fused_outputs.append((out_name, []))
-                stats.empty_smplestx_frames += 1
-                continue
-            if lower_body_stabilizer is not None:
-                body = lower_body_stabilizer.apply(body, frame.frame_id)
-            if global_orient_stabilizer is not None:
-                body = global_orient_stabilizer.apply(body, frame.frame_id)
-            if torso_stabilizer is not None:
-                body = torso_stabilizer.apply(body, frame.frame_id)
-            if shape_stabilizer is not None:
-                body = shape_stabilizer.apply(body, frame.frame_id)
+                body_batch = smplestx.predict_batch(frame_batch)
+                if len(body_batch) != len(frame_batch):
+                    raise RuntimeError(
+                        "SMPLest-X batch result length mismatch: "
+                        f"{len(body_batch)} results for {len(frame_batch)} frames"
+                    )
+            except Exception as exc:
+                batch_error = exc
+                body_batch = [[] for _ in frame_batch]
+            smplestx_seconds = time.perf_counter() - batch_start
+            smplestx_seconds_per_frame = smplestx_seconds / len(frame_batch)
 
-            model_start = time.perf_counter()
-            try:
-                hands = wilor.predict(frame)
-            finally:
-                frame_timings["wilor"] = time.perf_counter() - model_start
-            if _has_hand_data(hands):
-                stats.wilor_matched += 1
-            else:
-                stats.wilor_missing += 1
-
-            model_start = time.perf_counter()
-            try:
-                face = emoca.predict(frame)
-            finally:
-                frame_timings["emoca"] = time.perf_counter() - model_start
-            if _has_face_data(face):
-                stats.emoca_matched += 1
-            else:
-                stats.emoca_missing += 1
-
-            fused = fuse_frame(body, hands, face)
-            validation_errors = validate_person(fused[0])
-            if validation_errors:
-                stats.validation_errors += len(validation_errors)
-                stats.warnings.append(
-                    f"{out_name}: {'; '.join(validation_errors)}"
-                )
-
-            fused_outputs.append((out_name, fused))
-        except Exception as exc:
-            frame_status = "error"
-            stats.errors += 1
-            stats.warnings.append(f"{frame.frame_id:06d}: {type(exc).__name__}: {exc}")
-            fused_outputs.append((out_name, []))
-        finally:
-            total_seconds = time.perf_counter() - frame_start
-            for key, seconds in frame_timings.items():
-                if seconds is None:
-                    continue
-                model_time_totals[key] += seconds
-                model_time_counts[key] += 1
-            per_frame_timings.append(
-                {
-                    "frame_id": frame.frame_id,
-                    "file": out_name,
-                    "status": frame_status,
-                    "timings_sec": frame_timings,
-                    "total_sec": total_seconds,
+            for frame, body in zip(frame_batch, body_batch):
+                stats.total_frames += 1
+                out_name = f"{frame.frame_id:06d}_params.pkl"
+                frame_timings: dict[str, float | None] = {
+                    key: None for key in MODEL_TIMING_KEYS
                 }
-            )
-            tqdm.write(
-                "[timing] "
-                f"frame={frame.frame_id:06d} "
-                f"smplestx={_format_timing_ms(frame_timings['smplestx'])} "
-                f"wilor={_format_timing_ms(frame_timings['wilor'])} "
-                f"emoca={_format_timing_ms(frame_timings['emoca'])} "
-                f"total={_format_timing_ms(total_seconds)} "
-                f"status={frame_status}"
-            )
+                frame_timings["smplestx"] = smplestx_seconds_per_frame
+                frame_start = time.perf_counter()
+                frame_status = "ok"
+                try:
+                    if batch_error is not None:
+                        raise batch_error
+                    if not body:
+                        frame_status = "empty_smplestx"
+                        fused_outputs.append((out_name, []))
+                        stats.empty_smplestx_frames += 1
+                        continue
+                    if lower_body_stabilizer is not None:
+                        body = lower_body_stabilizer.apply(body, frame.frame_id)
+                    if global_orient_stabilizer is not None:
+                        body = global_orient_stabilizer.apply(body, frame.frame_id)
+                    if torso_stabilizer is not None:
+                        body = torso_stabilizer.apply(body, frame.frame_id)
+                    if shape_stabilizer is not None:
+                        body = shape_stabilizer.apply(body, frame.frame_id)
+
+                    model_start = time.perf_counter()
+                    try:
+                        hands = wilor.predict(frame)
+                    finally:
+                        frame_timings["wilor"] = time.perf_counter() - model_start
+                    if _has_hand_data(hands):
+                        stats.wilor_matched += 1
+                    else:
+                        stats.wilor_missing += 1
+
+                    model_start = time.perf_counter()
+                    try:
+                        face = emoca.predict(frame)
+                    finally:
+                        frame_timings["emoca"] = time.perf_counter() - model_start
+                    if _has_face_data(face):
+                        stats.emoca_matched += 1
+                    else:
+                        stats.emoca_missing += 1
+
+                    fused = fuse_frame(body, hands, face)
+                    validation_errors = validate_person(fused[0])
+                    if validation_errors:
+                        stats.validation_errors += len(validation_errors)
+                        stats.warnings.append(
+                            f"{out_name}: {'; '.join(validation_errors)}"
+                        )
+
+                    fused_outputs.append((out_name, fused))
+                except Exception as exc:
+                    frame_status = "error"
+                    stats.errors += 1
+                    stats.warnings.append(f"{frame.frame_id:06d}: {type(exc).__name__}: {exc}")
+                    fused_outputs.append((out_name, []))
+                finally:
+                    total_seconds = (
+                        smplestx_seconds_per_frame
+                        + time.perf_counter()
+                        - frame_start
+                    )
+                    for key, seconds in frame_timings.items():
+                        if seconds is None:
+                            continue
+                        model_time_totals[key] += seconds
+                        model_time_counts[key] += 1
+                    per_frame_timings.append(
+                        {
+                            "frame_id": frame.frame_id,
+                            "file": out_name,
+                            "status": frame_status,
+                            "timings_sec": frame_timings,
+                            "total_sec": total_seconds,
+                            "smplestx_batch_size": len(frame_batch),
+                            "smplestx_batch_total_sec": smplestx_seconds,
+                        }
+                    )
+                    tqdm.write(
+                        "[timing] "
+                        f"frame={frame.frame_id:06d} "
+                        f"smplestx={_format_timing_ms(frame_timings['smplestx'])} "
+                        f"wilor={_format_timing_ms(frame_timings['wilor'])} "
+                        f"emoca={_format_timing_ms(frame_timings['emoca'])} "
+                        f"total={_format_timing_ms(total_seconds)} "
+                        f"status={frame_status}"
+                    )
+                    progress.update(1)
+    finally:
+        progress.close()
+
+    inference_total_sec = time.perf_counter() - inference_start
 
     if stats.total_frames == 0:
         raise RuntimeError(f"No frames decoded from: {video}")
@@ -328,6 +381,12 @@ def run_integrated_pipeline(
             key: None if seconds is None else seconds * 1000
             for key, seconds in timing_average_sec.items()
         },
+        "inference_total_sec": inference_total_sec,
+        "inference_total_ms": inference_total_sec * 1000,
+        "render_total_sec": None,
+        "render_total_ms": None,
+        "pipeline_total_sec": None,
+        "pipeline_total_ms": None,
         "per_frame": per_frame_timings,
     }
     with open(timing_report_path, "w") as f:
@@ -361,6 +420,7 @@ def run_integrated_pipeline(
             for key in MODEL_TIMING_KEYS
         )
     )
+    print(f"  inference_total={_format_timing_ms(inference_total_sec)}")
 
     if valid_fused_frames == 0:
         raise RuntimeError(
@@ -371,7 +431,9 @@ def run_integrated_pipeline(
         )
 
     final_video = rendered_dir / "smplest_wilor_emoca.mp4"
+    render_total_sec = None
     if not skip_render:
+        render_start = time.perf_counter()
         from zero_filter_render import (
             stage_render as render_smplx_video,
             stage_smooth,
@@ -415,6 +477,17 @@ def run_integrated_pipeline(
             video_fps=fps,
             viewport_size=viewport,
         )
+        render_total_sec = time.perf_counter() - render_start
+
+    pipeline_total_sec = time.perf_counter() - pipeline_start
+    timing_report["render_total_sec"] = render_total_sec
+    timing_report["render_total_ms"] = (
+        None if render_total_sec is None else render_total_sec * 1000
+    )
+    timing_report["pipeline_total_sec"] = pipeline_total_sec
+    timing_report["pipeline_total_ms"] = pipeline_total_sec * 1000
+    with open(timing_report_path, "w") as f:
+        json.dump(timing_report, f, indent=2)
 
     summary = {
         "name": run_name,
@@ -427,6 +500,12 @@ def run_integrated_pipeline(
         "valid_fused_frames": valid_fused_frames,
         "stats": stats.to_dict(),
         "timings": timing_report,
+        "smplestx_optimization": {
+            "detector_stride": max(1, smplestx_detector_stride),
+            "batch_size": smplestx_batch_size,
+            "inference_mode": smplestx_inference_mode,
+            "single_gpu_model": smplestx_single_gpu_model,
+        },
         "lower_body_stabilization": {
             "enabled": stabilize_lower_body,
             "reference_frame_id": (
@@ -485,6 +564,10 @@ def run_integrated_pipeline(
     print(f"  Fused params   : {fused_dir}")
     print(f"  Fusion report  : {report_path}")
     print(f"  Timing report  : {timing_report_path}")
+    print(f"  Inference time : {_format_timing_ms(inference_total_sec)}")
+    if render_total_sec is not None:
+        print(f"  Render time    : {_format_timing_ms(render_total_sec)}")
+    print(f"  Total time     : {_format_timing_ms(pipeline_total_sec)}")
     if not skip_render:
         print(f"  Rendered video : {final_video}")
     print("#" * 72)
@@ -514,6 +597,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--emoca_dir", default=str(EMOCA_DIR), help="EMOCA project/assets directory.")
     parser.add_argument("--device", default="cuda", help="Device for model inference.")
     parser.add_argument("--multi_person", action="store_true", help="Keep all SMPLest-X people.")
+    parser.add_argument(
+        "--smplestx_detector_stride",
+        type=int,
+        default=1,
+        help=(
+            "Run SMPLest-X person detection every N frames and reuse the last "
+            "bbox between detector frames. 1 preserves current behavior."
+        ),
+    )
+    parser.add_argument(
+        "--smplestx_batch_size",
+        type=int,
+        default=1,
+        help=(
+            "Batch this many SMPLest-X crops before model forward. "
+            "1 preserves current behavior."
+        ),
+    )
+    parser.add_argument(
+        "--smplestx_inference_mode",
+        action="store_true",
+        help="Use torch.inference_mode() for SMPLest-X forward instead of torch.no_grad().",
+    )
+    parser.add_argument(
+        "--smplestx_single_gpu_model",
+        action="store_true",
+        help="Use the unwrapped SMPLest-X module after checkpoint load instead of DataParallel.",
+    )
     parser.add_argument(
         "--stabilize_lower_body",
         action="store_true",
@@ -568,6 +679,10 @@ def main() -> None:
         stabilize_global_orient=args.stabilize_global_orient,
         stabilize_torso=args.stabilize_torso,
         stabilize_shape=args.stabilize_shape,
+        smplestx_detector_stride=args.smplestx_detector_stride,
+        smplestx_batch_size=args.smplestx_batch_size,
+        smplestx_inference_mode=args.smplestx_inference_mode,
+        smplestx_single_gpu_model=args.smplestx_single_gpu_model,
     )
 
 
