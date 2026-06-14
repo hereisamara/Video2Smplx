@@ -10,6 +10,7 @@ import argparse
 import copy
 import json
 import pickle
+import time
 from pathlib import Path
 
 from video2smplx.frames import extract_frames_cv2, iter_video_frames_cv2, list_frames
@@ -33,6 +34,7 @@ DEFAULT_SMPLX_MODEL = (
     / "smplx"
     / "SMPLX_NEUTRAL.npz"
 )
+MODEL_TIMING_KEYS = ("smplestx", "wilor", "emoca")
 
 
 def _clear_frame_dir(frame_dir: Path) -> None:
@@ -62,6 +64,18 @@ def _warning_sample(warnings: list[str], limit: int = 8) -> str:
     if len(warnings) > limit:
         suffix = f"\n  ... {len(warnings) - limit} more warnings in fusion_report.json"
     return "\n  " + "\n  ".join(shown) + suffix
+
+
+def _format_timing_ms(seconds: float | None) -> str:
+    if seconds is None:
+        return "skipped"
+    return f"{seconds * 1000:.1f} ms"
+
+
+def _timing_average(total_seconds: float, count: int) -> float | None:
+    if count == 0:
+        return None
+    return total_seconds / count
 
 
 def _effective_smooth_window(
@@ -129,6 +143,7 @@ def run_integrated_pipeline(
     fused_dir = output / "fused_params"
     rendered_dir = output / "rendered"
     report_path = fused_dir / "fusion_report.json"
+    timing_report_path = fused_dir / "model_timing_report.json"
 
     if not video.exists() and not reuse_frames:
         raise FileNotFoundError(f"Video not found: {video}")
@@ -192,6 +207,9 @@ def run_integrated_pipeline(
 
     stats = FusionStats()
     fused_outputs: list[tuple[str, list]] = []
+    model_time_totals = {key: 0.0 for key in MODEL_TIMING_KEYS}
+    model_time_counts = {key: 0 for key in MODEL_TIMING_KEYS}
+    per_frame_timings: list[dict] = []
     lower_body_stabilizer = LowerBodyStabilizer() if stabilize_lower_body else None
     global_orient_stabilizer = (
         GlobalOrientStabilizer() if stabilize_global_orient else None
@@ -202,9 +220,19 @@ def run_integrated_pipeline(
     for frame in tqdm(frame_iterable, total=frame_count, desc="Integrated inference"):
         stats.total_frames += 1
         out_name = f"{frame.frame_id:06d}_params.pkl"
+        frame_timings: dict[str, float | None] = {
+            key: None for key in MODEL_TIMING_KEYS
+        }
+        frame_start = time.perf_counter()
+        frame_status = "ok"
         try:
-            body = smplestx.predict(frame)
+            model_start = time.perf_counter()
+            try:
+                body = smplestx.predict(frame)
+            finally:
+                frame_timings["smplestx"] = time.perf_counter() - model_start
             if not body:
+                frame_status = "empty_smplestx"
                 fused_outputs.append((out_name, []))
                 stats.empty_smplestx_frames += 1
                 continue
@@ -217,13 +245,21 @@ def run_integrated_pipeline(
             if shape_stabilizer is not None:
                 body = shape_stabilizer.apply(body, frame.frame_id)
 
-            hands = wilor.predict(frame)
+            model_start = time.perf_counter()
+            try:
+                hands = wilor.predict(frame)
+            finally:
+                frame_timings["wilor"] = time.perf_counter() - model_start
             if _has_hand_data(hands):
                 stats.wilor_matched += 1
             else:
                 stats.wilor_missing += 1
 
-            face = emoca.predict(frame)
+            model_start = time.perf_counter()
+            try:
+                face = emoca.predict(frame)
+            finally:
+                frame_timings["emoca"] = time.perf_counter() - model_start
             if _has_face_data(face):
                 stats.emoca_matched += 1
             else:
@@ -239,9 +275,35 @@ def run_integrated_pipeline(
 
             fused_outputs.append((out_name, fused))
         except Exception as exc:
+            frame_status = "error"
             stats.errors += 1
             stats.warnings.append(f"{frame.frame_id:06d}: {type(exc).__name__}: {exc}")
             fused_outputs.append((out_name, []))
+        finally:
+            total_seconds = time.perf_counter() - frame_start
+            for key, seconds in frame_timings.items():
+                if seconds is None:
+                    continue
+                model_time_totals[key] += seconds
+                model_time_counts[key] += 1
+            per_frame_timings.append(
+                {
+                    "frame_id": frame.frame_id,
+                    "file": out_name,
+                    "status": frame_status,
+                    "timings_sec": frame_timings,
+                    "total_sec": total_seconds,
+                }
+            )
+            tqdm.write(
+                "[timing] "
+                f"frame={frame.frame_id:06d} "
+                f"smplestx={_format_timing_ms(frame_timings['smplestx'])} "
+                f"wilor={_format_timing_ms(frame_timings['wilor'])} "
+                f"emoca={_format_timing_ms(frame_timings['emoca'])} "
+                f"total={_format_timing_ms(total_seconds)} "
+                f"status={frame_status}"
+            )
 
     if stats.total_frames == 0:
         raise RuntimeError(f"No frames decoded from: {video}")
@@ -253,6 +315,24 @@ def run_integrated_pipeline(
     with open(report_path, "w") as f:
         json.dump(stats.to_dict(), f, indent=2)
 
+    timing_average_sec = {
+        key: _timing_average(model_time_totals[key], model_time_counts[key])
+        for key in MODEL_TIMING_KEYS
+    }
+    timing_report = {
+        "frames": stats.total_frames,
+        "model_counts": model_time_counts,
+        "model_totals_sec": model_time_totals,
+        "model_averages_sec": timing_average_sec,
+        "model_averages_ms": {
+            key: None if seconds is None else seconds * 1000
+            for key, seconds in timing_average_sec.items()
+        },
+        "per_frame": per_frame_timings,
+    }
+    with open(timing_report_path, "w") as f:
+        json.dump(timing_report, f, indent=2)
+
     valid_fused_frames = sum(
         1 for _, fused in fused_outputs if _is_valid_fused_frame(fused)
     )
@@ -262,6 +342,7 @@ def run_integrated_pipeline(
     print(f"  Empty body frames  : {stats.empty_smplestx_frames}")
     print(f"  Frame errors       : {stats.errors}")
     print(f"  Fusion report      : {report_path}")
+    print(f"  Timing report      : {timing_report_path}")
     if lower_body_stabilizer is not None:
         print(f"  Lower-body fixed   : {lower_body_stabilizer.applied_frames} frames")
     if global_orient_stabilizer is not None:
@@ -270,6 +351,16 @@ def run_integrated_pipeline(
         print(f"  Torso fixed        : {torso_stabilizer.applied_frames} frames")
     if shape_stabilizer is not None:
         print(f"  Shape fixed        : {shape_stabilizer.applied_frames} frames")
+
+    print("\n[timing averages]")
+    print(
+        "  "
+        + "  ".join(
+            f"{key}={_format_timing_ms(timing_average_sec[key])}"
+            f" (n={model_time_counts[key]})"
+            for key in MODEL_TIMING_KEYS
+        )
+    )
 
     if valid_fused_frames == 0:
         raise RuntimeError(
@@ -331,9 +422,11 @@ def run_integrated_pipeline(
         "output": str(output),
         "fused_params": str(fused_dir),
         "fusion_report": str(report_path),
+        "timing_report": str(timing_report_path),
         "rendered_video": str(final_video) if not skip_render else None,
         "valid_fused_frames": valid_fused_frames,
         "stats": stats.to_dict(),
+        "timings": timing_report,
         "lower_body_stabilization": {
             "enabled": stabilize_lower_body,
             "reference_frame_id": (
@@ -391,6 +484,7 @@ def run_integrated_pipeline(
     print("  INTEGRATED PIPELINE COMPLETE")
     print(f"  Fused params   : {fused_dir}")
     print(f"  Fusion report  : {report_path}")
+    print(f"  Timing report  : {timing_report_path}")
     if not skip_render:
         print(f"  Rendered video : {final_video}")
     print("#" * 72)
