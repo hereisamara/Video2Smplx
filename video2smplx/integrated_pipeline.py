@@ -7,6 +7,7 @@ then performs body/hand/face inference and fusion per frame in memory.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import copy
 import json
 import pickle
@@ -35,6 +36,7 @@ DEFAULT_SMPLX_MODEL = (
     / "SMPLX_NEUTRAL.npz"
 )
 MODEL_TIMING_KEYS = ("smplestx", "wilor", "emoca")
+PARALLEL_MODEL_WORKERS = len(MODEL_TIMING_KEYS)
 
 
 def _clear_frame_dir(frame_dir: Path) -> None:
@@ -78,6 +80,24 @@ def _timing_average(total_seconds: float, count: int) -> float | None:
     return total_seconds / count
 
 
+def _add_step_timing(
+    step_timings: list[dict],
+    name: str,
+    start_time: float,
+    metadata: dict | None = None,
+) -> float:
+    seconds = time.perf_counter() - start_time
+    step_timings.append(
+        {
+            "name": name,
+            "seconds": seconds,
+            "milliseconds": seconds * 1000,
+            "metadata": metadata or {},
+        }
+    )
+    return seconds
+
+
 def _iter_batches(iterable, batch_size: int):
     batch = []
     for item in iterable:
@@ -87,6 +107,45 @@ def _iter_batches(iterable, batch_size: int):
             batch = []
     if batch:
         yield batch
+
+
+def _timed_predict(predict_fn, frame) -> dict:
+    start_time = time.perf_counter()
+    try:
+        return {
+            "result": predict_fn(frame),
+            "seconds": time.perf_counter() - start_time,
+            "exception": None,
+        }
+    except Exception as exc:
+        return {
+            "result": None,
+            "seconds": time.perf_counter() - start_time,
+            "exception": exc,
+        }
+
+
+def _predict_frame_parallel(executor, smplestx, wilor, emoca, frame):
+    futures = {
+        "smplestx": executor.submit(_timed_predict, smplestx.predict, frame),
+        "wilor": executor.submit(_timed_predict, wilor.predict, frame),
+        "emoca": executor.submit(_timed_predict, emoca.predict, frame),
+    }
+    results = {}
+    timings = {}
+    errors = []
+    for key in MODEL_TIMING_KEYS:
+        prediction = futures[key].result()
+        timings[key] = prediction["seconds"]
+        if prediction["exception"] is not None:
+            errors.append(f"{key}: {type(prediction['exception']).__name__}: {prediction['exception']}")
+            continue
+        results[key] = prediction["result"]
+
+    if errors:
+        raise RuntimeError("; ".join(errors))
+
+    return results["smplestx"], results["wilor"], results["emoca"], timings
 
 
 def _effective_smooth_window(
@@ -137,10 +196,13 @@ def run_integrated_pipeline(
     smplestx_batch_size: int = 1,
     smplestx_inference_mode: bool = False,
     smplestx_single_gpu_model: bool = False,
+    parallel_models: bool = False,
 ) -> dict:
     from tqdm import tqdm
 
     pipeline_start = time.perf_counter()
+    step_timings: list[dict] = []
+    step_start = pipeline_start
     video = Path(video).resolve()
     output = Path(output).resolve()
     smplestx_dir = Path(smplestx_dir).resolve()
@@ -163,7 +225,14 @@ def run_integrated_pipeline(
 
     if not video.exists() and not reuse_frames:
         raise FileNotFoundError(f"Video not found: {video}")
+    _add_step_timing(
+        step_timings,
+        "setup_paths",
+        step_start,
+        {"output": str(output), "video": str(video)},
+    )
 
+    step_start = time.perf_counter()
     fused_dir.mkdir(parents=True, exist_ok=True)
     if reuse_frames:
         frames = list_frames(frames_dir)
@@ -184,6 +253,22 @@ def run_integrated_pipeline(
         frame_iterable = iter_video_frames_cv2(video, fps=fps)
         frame_count = None
         frame_source = "in-memory video stream"
+    _add_step_timing(
+        step_timings,
+        "prepare_frames",
+        step_start,
+        {
+            "mode": (
+                "reuse_frames"
+                if reuse_frames
+                else "materialize_frames"
+                if materialize_frames
+                else "stream_frames"
+            ),
+            "frame_count": frame_count,
+            "frame_source": frame_source,
+        },
+    )
 
     print("\n" + "#" * 72)
     print("  INTEGRATED VIDEO2SMPLX PIPELINE")
@@ -207,13 +292,19 @@ def run_integrated_pipeline(
     print(f"  sx batch   : {max(1, smplestx_batch_size)}")
     print(f"  sx infer   : {'inference_mode' if smplestx_inference_mode else 'no_grad'}")
     print(f"  sx model   : {'single GPU module' if smplestx_single_gpu_model else 'DataParallel wrapper'}")
+    print(f"  model exec : {'parallel per frame' if parallel_models else 'sequential/batched'}")
+    if parallel_models and smplestx_batch_size > 1:
+        print("  note       : --parallel_models runs SMPLest-X one frame at a time")
     print("#" * 72)
 
+    step_start = time.perf_counter()
     from video2smplx.runners.emoca import EMOCARunner
     from video2smplx.runners.smplestx import SmplestXRunner
     from video2smplx.runners.wilor import WiLoRRunner
+    _add_step_timing(step_timings, "import_runners", step_start)
 
     print("\n[load] SMPLest-X")
+    step_start = time.perf_counter()
     smplestx = SmplestXRunner(
         smplestx_dir,
         ckpt_name=smplestx_ckpt,
@@ -224,10 +315,15 @@ def run_integrated_pipeline(
         single_gpu_model=smplestx_single_gpu_model,
         model_batch_size=smplestx_batch_size,
     )
+    _add_step_timing(step_timings, "load_smplestx", step_start)
     print("\n[load] WiLoR")
+    step_start = time.perf_counter()
     wilor = WiLoRRunner(wilor_dir, device=device)
+    _add_step_timing(step_timings, "load_wilor", step_start)
     print("\n[load] EMOCA")
+    step_start = time.perf_counter()
     emoca = EMOCARunner(emoca_dir, model_name=emoca_model, device=device)
+    _add_step_timing(step_timings, "load_emoca", step_start)
 
     stats = FusionStats()
     fused_outputs: list[tuple[str, list]] = []
@@ -242,131 +338,251 @@ def run_integrated_pipeline(
     shape_stabilizer = ShapeStabilizer() if stabilize_shape else None
     smplestx_batch_size = max(1, smplestx_batch_size)
 
+    def _apply_stabilizers(body, frame_id: int):
+        if lower_body_stabilizer is not None:
+            body = lower_body_stabilizer.apply(body, frame_id)
+        if global_orient_stabilizer is not None:
+            body = global_orient_stabilizer.apply(body, frame_id)
+        if torso_stabilizer is not None:
+            body = torso_stabilizer.apply(body, frame_id)
+        if shape_stabilizer is not None:
+            body = shape_stabilizer.apply(body, frame_id)
+        return body
+
+    def _record_frame_timing(
+        frame,
+        out_name: str,
+        frame_status: str,
+        frame_timings: dict[str, float | None],
+        total_seconds: float,
+        metadata: dict | None = None,
+    ) -> None:
+        for key, seconds in frame_timings.items():
+            if seconds is None:
+                continue
+            model_time_totals[key] += seconds
+            model_time_counts[key] += 1
+
+        timing_record = {
+            "frame_id": frame.frame_id,
+            "file": out_name,
+            "status": frame_status,
+            "timings_sec": frame_timings,
+            "total_sec": total_seconds,
+            "parallel_models": parallel_models,
+        }
+        if metadata:
+            timing_record.update(metadata)
+        per_frame_timings.append(timing_record)
+        tqdm.write(
+            "[timing] "
+            f"frame={frame.frame_id:06d} "
+            f"smplestx={_format_timing_ms(frame_timings['smplestx'])} "
+            f"wilor={_format_timing_ms(frame_timings['wilor'])} "
+            f"emoca={_format_timing_ms(frame_timings['emoca'])} "
+            f"total={_format_timing_ms(total_seconds)} "
+            f"status={frame_status}"
+        )
+        progress.update(1)
+
     inference_start = time.perf_counter()
     progress = tqdm(total=frame_count, desc="Integrated inference")
     try:
-        for frame_batch in _iter_batches(frame_iterable, smplestx_batch_size):
-            batch_start = time.perf_counter()
-            batch_error: Exception | None = None
-            try:
-                body_batch = smplestx.predict_batch(frame_batch)
-                if len(body_batch) != len(frame_batch):
-                    raise RuntimeError(
-                        "SMPLest-X batch result length mismatch: "
-                        f"{len(body_batch)} results for {len(frame_batch)} frames"
-                    )
-            except Exception as exc:
-                batch_error = exc
-                body_batch = [[] for _ in frame_batch]
-            smplestx_seconds = time.perf_counter() - batch_start
-            smplestx_seconds_per_frame = smplestx_seconds / len(frame_batch)
-
-            for frame, body in zip(frame_batch, body_batch):
-                stats.total_frames += 1
-                out_name = f"{frame.frame_id:06d}_params.pkl"
-                frame_timings: dict[str, float | None] = {
-                    key: None for key in MODEL_TIMING_KEYS
-                }
-                frame_timings["smplestx"] = smplestx_seconds_per_frame
-                frame_start = time.perf_counter()
-                frame_status = "ok"
-                try:
-                    if batch_error is not None:
-                        raise batch_error
-                    if not body:
-                        frame_status = "empty_smplestx"
-                        fused_outputs.append((out_name, []))
-                        stats.empty_smplestx_frames += 1
-                        continue
-                    if lower_body_stabilizer is not None:
-                        body = lower_body_stabilizer.apply(body, frame.frame_id)
-                    if global_orient_stabilizer is not None:
-                        body = global_orient_stabilizer.apply(body, frame.frame_id)
-                    if torso_stabilizer is not None:
-                        body = torso_stabilizer.apply(body, frame.frame_id)
-                    if shape_stabilizer is not None:
-                        body = shape_stabilizer.apply(body, frame.frame_id)
-
-                    model_start = time.perf_counter()
+        if parallel_models:
+            with ThreadPoolExecutor(max_workers=PARALLEL_MODEL_WORKERS) as executor:
+                for frame in frame_iterable:
+                    stats.total_frames += 1
+                    out_name = f"{frame.frame_id:06d}_params.pkl"
+                    frame_timings: dict[str, float | None] = {
+                        key: None for key in MODEL_TIMING_KEYS
+                    }
+                    frame_start = time.perf_counter()
+                    frame_status = "ok"
                     try:
-                        hands = wilor.predict(frame)
-                    finally:
-                        frame_timings["wilor"] = time.perf_counter() - model_start
-                    if _has_hand_data(hands):
-                        stats.wilor_matched += 1
-                    else:
-                        stats.wilor_missing += 1
-
-                    model_start = time.perf_counter()
-                    try:
-                        face = emoca.predict(frame)
-                    finally:
-                        frame_timings["emoca"] = time.perf_counter() - model_start
-                    if _has_face_data(face):
-                        stats.emoca_matched += 1
-                    else:
-                        stats.emoca_missing += 1
-
-                    fused = fuse_frame(body, hands, face)
-                    validation_errors = validate_person(fused[0])
-                    if validation_errors:
-                        stats.validation_errors += len(validation_errors)
-                        stats.warnings.append(
-                            f"{out_name}: {'; '.join(validation_errors)}"
+                        body, hands, face, parallel_timings = _predict_frame_parallel(
+                            executor,
+                            smplestx,
+                            wilor,
+                            emoca,
+                            frame,
                         )
-
-                    fused_outputs.append((out_name, fused))
-                except Exception as exc:
-                    frame_status = "error"
-                    stats.errors += 1
-                    stats.warnings.append(f"{frame.frame_id:06d}: {type(exc).__name__}: {exc}")
-                    fused_outputs.append((out_name, []))
-                finally:
-                    total_seconds = (
-                        smplestx_seconds_per_frame
-                        + time.perf_counter()
-                        - frame_start
-                    )
-                    for key, seconds in frame_timings.items():
-                        if seconds is None:
+                        frame_timings.update(parallel_timings)
+                        if not body:
+                            frame_status = "empty_smplestx"
+                            fused_outputs.append((out_name, []))
+                            stats.empty_smplestx_frames += 1
                             continue
-                        model_time_totals[key] += seconds
-                        model_time_counts[key] += 1
-                    per_frame_timings.append(
-                        {
-                            "frame_id": frame.frame_id,
-                            "file": out_name,
-                            "status": frame_status,
-                            "timings_sec": frame_timings,
-                            "total_sec": total_seconds,
-                            "smplestx_batch_size": len(frame_batch),
-                            "smplestx_batch_total_sec": smplestx_seconds,
-                        }
-                    )
-                    tqdm.write(
-                        "[timing] "
-                        f"frame={frame.frame_id:06d} "
-                        f"smplestx={_format_timing_ms(frame_timings['smplestx'])} "
-                        f"wilor={_format_timing_ms(frame_timings['wilor'])} "
-                        f"emoca={_format_timing_ms(frame_timings['emoca'])} "
-                        f"total={_format_timing_ms(total_seconds)} "
-                        f"status={frame_status}"
-                    )
-                    progress.update(1)
+
+                        body = _apply_stabilizers(body, frame.frame_id)
+
+                        if _has_hand_data(hands):
+                            stats.wilor_matched += 1
+                        else:
+                            stats.wilor_missing += 1
+
+                        if _has_face_data(face):
+                            stats.emoca_matched += 1
+                        else:
+                            stats.emoca_missing += 1
+
+                        fused = fuse_frame(body, hands, face)
+                        validation_errors = validate_person(fused[0])
+                        if validation_errors:
+                            stats.validation_errors += len(validation_errors)
+                            stats.warnings.append(
+                                f"{out_name}: {'; '.join(validation_errors)}"
+                            )
+
+                        fused_outputs.append((out_name, fused))
+                    except Exception as exc:
+                        frame_status = "error"
+                        stats.errors += 1
+                        stats.warnings.append(
+                            f"{frame.frame_id:06d}: {type(exc).__name__}: {exc}"
+                        )
+                        fused_outputs.append((out_name, []))
+                    finally:
+                        _record_frame_timing(
+                            frame=frame,
+                            out_name=out_name,
+                            frame_status=frame_status,
+                            frame_timings=frame_timings,
+                            total_seconds=time.perf_counter() - frame_start,
+                            metadata={
+                                "smplestx_batch_size": 1,
+                                "smplestx_batch_total_sec": frame_timings["smplestx"],
+                            },
+                        )
+        else:
+            for frame_batch in _iter_batches(frame_iterable, smplestx_batch_size):
+                batch_start = time.perf_counter()
+                batch_error: Exception | None = None
+                try:
+                    body_batch = smplestx.predict_batch(frame_batch)
+                    if len(body_batch) != len(frame_batch):
+                        raise RuntimeError(
+                            "SMPLest-X batch result length mismatch: "
+                            f"{len(body_batch)} results for {len(frame_batch)} frames"
+                        )
+                except Exception as exc:
+                    batch_error = exc
+                    body_batch = [[] for _ in frame_batch]
+                smplestx_seconds = time.perf_counter() - batch_start
+                smplestx_seconds_per_frame = smplestx_seconds / len(frame_batch)
+
+                for frame, body in zip(frame_batch, body_batch):
+                    stats.total_frames += 1
+                    out_name = f"{frame.frame_id:06d}_params.pkl"
+                    frame_timings: dict[str, float | None] = {
+                        key: None for key in MODEL_TIMING_KEYS
+                    }
+                    frame_timings["smplestx"] = smplestx_seconds_per_frame
+                    frame_start = time.perf_counter()
+                    frame_status = "ok"
+                    try:
+                        if batch_error is not None:
+                            raise batch_error
+                        if not body:
+                            frame_status = "empty_smplestx"
+                            fused_outputs.append((out_name, []))
+                            stats.empty_smplestx_frames += 1
+                            continue
+
+                        body = _apply_stabilizers(body, frame.frame_id)
+
+                        model_start = time.perf_counter()
+                        try:
+                            hands = wilor.predict(frame)
+                        finally:
+                            frame_timings["wilor"] = time.perf_counter() - model_start
+                        if _has_hand_data(hands):
+                            stats.wilor_matched += 1
+                        else:
+                            stats.wilor_missing += 1
+
+                        model_start = time.perf_counter()
+                        try:
+                            face = emoca.predict(frame)
+                        finally:
+                            frame_timings["emoca"] = time.perf_counter() - model_start
+                        if _has_face_data(face):
+                            stats.emoca_matched += 1
+                        else:
+                            stats.emoca_missing += 1
+
+                        fused = fuse_frame(body, hands, face)
+                        validation_errors = validate_person(fused[0])
+                        if validation_errors:
+                            stats.validation_errors += len(validation_errors)
+                            stats.warnings.append(
+                                f"{out_name}: {'; '.join(validation_errors)}"
+                            )
+
+                        fused_outputs.append((out_name, fused))
+                    except Exception as exc:
+                        frame_status = "error"
+                        stats.errors += 1
+                        stats.warnings.append(
+                            f"{frame.frame_id:06d}: {type(exc).__name__}: {exc}"
+                        )
+                        fused_outputs.append((out_name, []))
+                    finally:
+                        total_seconds = (
+                            smplestx_seconds_per_frame
+                            + time.perf_counter()
+                            - frame_start
+                        )
+                        _record_frame_timing(
+                            frame=frame,
+                            out_name=out_name,
+                            frame_status=frame_status,
+                            frame_timings=frame_timings,
+                            total_seconds=total_seconds,
+                            metadata={
+                                "smplestx_batch_size": len(frame_batch),
+                                "smplestx_batch_total_sec": smplestx_seconds,
+                            },
+                        )
     finally:
         progress.close()
 
     inference_total_sec = time.perf_counter() - inference_start
+    step_timings.append(
+        {
+            "name": "integrated_inference",
+            "seconds": inference_total_sec,
+            "milliseconds": inference_total_sec * 1000,
+            "metadata": {
+                "frames": stats.total_frames,
+                "smplestx_batch_size": smplestx_batch_size,
+                "parallel_models": parallel_models,
+            },
+        }
+    )
 
     if stats.total_frames == 0:
         raise RuntimeError(f"No frames decoded from: {video}")
 
+    step_start = time.perf_counter()
     for out_name, fused in fused_outputs:
         with open(fused_dir / out_name, "wb") as f:
             pickle.dump(fused, f)
+    _add_step_timing(
+        step_timings,
+        "write_fused_params",
+        step_start,
+        {"files": len(fused_outputs), "directory": str(fused_dir)},
+    )
 
+    step_start = time.perf_counter()
     with open(report_path, "w") as f:
         json.dump(stats.to_dict(), f, indent=2)
+    _add_step_timing(
+        step_timings,
+        "write_fusion_report",
+        step_start,
+        {"path": str(report_path)},
+    )
 
     timing_average_sec = {
         key: _timing_average(model_time_totals[key], model_time_counts[key])
@@ -383,14 +599,24 @@ def run_integrated_pipeline(
         },
         "inference_total_sec": inference_total_sec,
         "inference_total_ms": inference_total_sec * 1000,
+        "parallel_models": parallel_models,
+        "parallel_model_workers": PARALLEL_MODEL_WORKERS if parallel_models else 0,
         "render_total_sec": None,
         "render_total_ms": None,
         "pipeline_total_sec": None,
         "pipeline_total_ms": None,
+        "pipeline_steps": step_timings,
         "per_frame": per_frame_timings,
     }
+    step_start = time.perf_counter()
     with open(timing_report_path, "w") as f:
         json.dump(timing_report, f, indent=2)
+    _add_step_timing(
+        step_timings,
+        "write_initial_timing_report",
+        step_start,
+        {"path": str(timing_report_path)},
+    )
 
     valid_fused_frames = sum(
         1 for _, fused in fused_outputs if _is_valid_fused_frame(fused)
@@ -434,21 +660,45 @@ def run_integrated_pipeline(
     render_total_sec = None
     if not skip_render:
         render_start = time.perf_counter()
+        step_start = time.perf_counter()
         from zero_filter_render import (
             stage_render as render_smplx_video,
             stage_smooth,
             stage_zero_transl,
         )
+        _add_step_timing(step_timings, "render_import_helpers", step_start)
 
+        step_start = time.perf_counter()
         rendered_dir.mkdir(parents=True, exist_ok=True)
         render_data = copy.deepcopy([fused for _, fused in fused_outputs])
+        _add_step_timing(
+            step_timings,
+            "render_prepare_data",
+            step_start,
+            {"frames": len(render_data), "directory": str(rendered_dir)},
+        )
+        step_start = time.perf_counter()
         render_data = stage_zero_transl(render_data)
+        _add_step_timing(step_timings, "render_zero_translation", step_start)
         effective_smooth_window = _effective_smooth_window(
             smooth_window,
             valid_fused_frames,
             smooth_poly,
         )
         if effective_smooth_window is None:
+            step_timings.append(
+                {
+                    "name": "render_smoothing",
+                    "seconds": 0.0,
+                    "milliseconds": 0.0,
+                    "metadata": {
+                        "skipped": True,
+                        "reason": "not enough valid frames",
+                        "valid_frames": valid_fused_frames,
+                        "smooth_poly": smooth_poly,
+                    },
+                }
+            )
             print(
                 "\n[render] Skipping smoothing because there are not enough "
                 f"valid frames ({valid_fused_frames}) for polyorder={smooth_poly}."
@@ -460,16 +710,34 @@ def run_integrated_pipeline(
                     f"{smooth_window} to {effective_smooth_window} for "
                     f"{valid_fused_frames} valid frames."
                 )
+            step_start = time.perf_counter()
             render_data = stage_smooth(
                 render_data,
                 effective_smooth_window,
                 smooth_poly,
             )
+            _add_step_timing(
+                step_timings,
+                "render_smoothing",
+                step_start,
+                {
+                    "smooth_window": effective_smooth_window,
+                    "smooth_poly": smooth_poly,
+                },
+            )
+        step_start = time.perf_counter()
         params_out_dir = rendered_dir / "params"
         params_out_dir.mkdir(parents=True, exist_ok=True)
         for (out_name, _), data in zip(fused_outputs, render_data):
             with open(params_out_dir / out_name, "wb") as f:
                 pickle.dump(data, f)
+        _add_step_timing(
+            step_timings,
+            "render_write_params",
+            step_start,
+            {"files": len(fused_outputs), "directory": str(params_out_dir)},
+        )
+        step_start = time.perf_counter()
         render_smplx_video(
             all_data=render_data,
             smplx_model_path=str(smplx_model),
@@ -477,7 +745,30 @@ def run_integrated_pipeline(
             video_fps=fps,
             viewport_size=viewport,
         )
+        _add_step_timing(
+            step_timings,
+            "render_video",
+            step_start,
+            {"path": str(final_video), "viewport": viewport, "fps": fps},
+        )
         render_total_sec = time.perf_counter() - render_start
+        step_timings.append(
+            {
+                "name": "render_total",
+                "seconds": render_total_sec,
+                "milliseconds": render_total_sec * 1000,
+                "metadata": {"skip_render": False},
+            }
+        )
+    else:
+        step_timings.append(
+            {
+                "name": "render_total",
+                "seconds": 0.0,
+                "milliseconds": 0.0,
+                "metadata": {"skip_render": True},
+            }
+        )
 
     pipeline_total_sec = time.perf_counter() - pipeline_start
     timing_report["render_total_sec"] = render_total_sec
@@ -486,6 +777,17 @@ def run_integrated_pipeline(
     )
     timing_report["pipeline_total_sec"] = pipeline_total_sec
     timing_report["pipeline_total_ms"] = pipeline_total_sec * 1000
+    timing_report["pipeline_steps"] = step_timings
+    step_start = time.perf_counter()
+    with open(timing_report_path, "w") as f:
+        json.dump(timing_report, f, indent=2)
+    _add_step_timing(
+        step_timings,
+        "write_final_timing_report",
+        step_start,
+        {"path": str(timing_report_path)},
+    )
+    timing_report["pipeline_steps"] = step_timings
     with open(timing_report_path, "w") as f:
         json.dump(timing_report, f, indent=2)
 
@@ -506,6 +808,7 @@ def run_integrated_pipeline(
             "inference_mode": smplestx_inference_mode,
             "single_gpu_model": smplestx_single_gpu_model,
         },
+        "parallel_models": parallel_models,
         "lower_body_stabilization": {
             "enabled": stabilize_lower_body,
             "reference_frame_id": (
@@ -568,6 +871,9 @@ def run_integrated_pipeline(
     if render_total_sec is not None:
         print(f"  Render time    : {_format_timing_ms(render_total_sec)}")
     print(f"  Total time     : {_format_timing_ms(pipeline_total_sec)}")
+    print("\n[pipeline steps]")
+    for step in step_timings:
+        print(f"  {step['name']}: {_format_timing_ms(step['seconds'])}")
     if not skip_render:
         print(f"  Rendered video : {final_video}")
     print("#" * 72)
@@ -624,6 +930,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--smplestx_single_gpu_model",
         action="store_true",
         help="Use the unwrapped SMPLest-X module after checkpoint load instead of DataParallel.",
+    )
+    parser.add_argument(
+        "--parallel_models",
+        action="store_true",
+        help=(
+            "Run SMPLest-X, WiLoR, and EMOCA predict calls concurrently per frame. "
+            "Default keeps the sequential/batched path."
+        ),
     )
     parser.add_argument(
         "--stabilize_lower_body",
@@ -683,6 +997,7 @@ def main() -> None:
         smplestx_batch_size=args.smplestx_batch_size,
         smplestx_inference_mode=args.smplestx_inference_mode,
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,
+        parallel_models=args.parallel_models,
     )
 
 
