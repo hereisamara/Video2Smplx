@@ -197,6 +197,7 @@ def run_integrated_pipeline(
     smplestx_inference_mode: bool = False,
     smplestx_single_gpu_model: bool = False,
     parallel_models: bool = False,
+    save_raw_smplestx: bool = False,
 ) -> dict:
     from tqdm import tqdm
 
@@ -219,6 +220,7 @@ def run_integrated_pipeline(
     run_name = name or video.stem
     frames_dir = Path(frames_dir).resolve() if frames_dir else output / "frames"
     fused_dir = output / "fused_params"
+    raw_smplestx_dir = output / "smplestx_params"
     rendered_dir = output / "rendered"
     report_path = fused_dir / "fusion_report.json"
     timing_report_path = fused_dir / "model_timing_report.json"
@@ -234,6 +236,8 @@ def run_integrated_pipeline(
 
     step_start = time.perf_counter()
     fused_dir.mkdir(parents=True, exist_ok=True)
+    if save_raw_smplestx:
+        raw_smplestx_dir.mkdir(parents=True, exist_ok=True)
     if reuse_frames:
         frames = list_frames(frames_dir)
         frame_iterable = frames
@@ -386,6 +390,7 @@ def run_integrated_pipeline(
         progress.update(1)
 
     inference_start = time.perf_counter()
+    raw_smplestx_outputs: list[tuple[str, list]] = []
     progress = tqdm(total=frame_count, desc="Integrated inference")
     try:
         if parallel_models:
@@ -410,10 +415,14 @@ def run_integrated_pipeline(
                         if not body:
                             frame_status = "empty_smplestx"
                             fused_outputs.append((out_name, []))
+                            if save_raw_smplestx:
+                                raw_smplestx_outputs.append((out_name, []))
                             stats.empty_smplestx_frames += 1
                             continue
 
                         body = _apply_stabilizers(body, frame.frame_id)
+                        if save_raw_smplestx:
+                            raw_smplestx_outputs.append((out_name, copy.deepcopy(body)))
 
                         if _has_hand_data(hands):
                             stats.wilor_matched += 1
@@ -485,10 +494,14 @@ def run_integrated_pipeline(
                         if not body:
                             frame_status = "empty_smplestx"
                             fused_outputs.append((out_name, []))
+                            if save_raw_smplestx:
+                                raw_smplestx_outputs.append((out_name, []))
                             stats.empty_smplestx_frames += 1
                             continue
 
                         body = _apply_stabilizers(body, frame.frame_id)
+                        if save_raw_smplestx:
+                            raw_smplestx_outputs.append((out_name, copy.deepcopy(body)))
 
                         model_start = time.perf_counter()
                         try:
@@ -574,6 +587,18 @@ def run_integrated_pipeline(
         {"files": len(fused_outputs), "directory": str(fused_dir)},
     )
 
+    if save_raw_smplestx:
+        step_start = time.perf_counter()
+        for out_name, raw_smplestx in raw_smplestx_outputs:
+            with open(raw_smplestx_dir / out_name, "wb") as f:
+                pickle.dump(raw_smplestx, f)
+        _add_step_timing(
+            step_timings,
+            "write_raw_smplestx_params",
+            step_start,
+            {"files": len(raw_smplestx_outputs), "directory": str(raw_smplestx_dir)},
+        )
+
     step_start = time.perf_counter()
     with open(report_path, "w") as f:
         json.dump(stats.to_dict(), f, indent=2)
@@ -628,6 +653,8 @@ def run_integrated_pipeline(
     print(f"  Frame errors       : {stats.errors}")
     print(f"  Fusion report      : {report_path}")
     print(f"  Timing report      : {timing_report_path}")
+    if save_raw_smplestx:
+        print(f"  Raw SMPLest-X      : {raw_smplestx_dir}")
     if lower_body_stabilizer is not None:
         print(f"  Lower-body fixed   : {lower_body_stabilizer.applied_frames} frames")
     if global_orient_stabilizer is not None:
@@ -940,6 +967,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--save_raw_smplestx",
+        action="store_true",
+        help="Also save SMPLest-X-only per-frame PKLs to <output>/smplestx_params before fusion.",
+    )
+    parser.add_argument(
         "--stabilize_lower_body",
         action="store_true",
         help="Hold primary person's lower-body SMPL-X body_pose joints from the first valid frame.",
@@ -998,6 +1030,7 @@ def main() -> None:
         smplestx_inference_mode=args.smplestx_inference_mode,
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,
         parallel_models=args.parallel_models,
+        save_raw_smplestx=args.save_raw_smplestx,
     )
 
 
