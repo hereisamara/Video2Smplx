@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 from pathlib import Path
 from typing import Any
 
@@ -85,9 +86,12 @@ class SmplestXRunner:
             )
 
             cfg = Config.load_config(str(config_path))
+            job_id = os.environ.get("SLURM_JOB_ID", "nojid")
+            task_id = os.environ.get("SLURM_ARRAY_TASK_ID", "notask")
             exp_name = (
                 f"integrated_{ckpt_name}_"
-                f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_"
+                f"job{job_id}_task{task_id}_pid{os.getpid()}"
             )
             cfg.update_config(
                 {
