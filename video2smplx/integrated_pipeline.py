@@ -198,8 +198,14 @@ def run_integrated_pipeline(
     smplestx_single_gpu_model: bool = False,
     parallel_models: bool = False,
     save_raw_smplestx: bool = False,
+    smplestx_only: bool = False,
 ) -> dict:
     from tqdm import tqdm
+
+    if smplestx_only:
+        save_raw_smplestx = True
+        parallel_models = False
+        skip_render = True
 
     pipeline_start = time.perf_counter()
     step_timings: list[dict] = []
@@ -222,8 +228,9 @@ def run_integrated_pipeline(
     fused_dir = output / "fused_params"
     raw_smplestx_dir = output / "smplestx_params"
     rendered_dir = output / "rendered"
-    report_path = fused_dir / "fusion_report.json"
-    timing_report_path = fused_dir / "model_timing_report.json"
+    report_dir = raw_smplestx_dir if smplestx_only else fused_dir
+    report_path = report_dir / ("smplestx_report.json" if smplestx_only else "fusion_report.json")
+    timing_report_path = report_dir / "model_timing_report.json"
 
     if not video.exists() and not reuse_frames:
         raise FileNotFoundError(f"Video not found: {video}")
@@ -235,7 +242,8 @@ def run_integrated_pipeline(
     )
 
     step_start = time.perf_counter()
-    fused_dir.mkdir(parents=True, exist_ok=True)
+    if not smplestx_only:
+        fused_dir.mkdir(parents=True, exist_ok=True)
     if save_raw_smplestx:
         raw_smplestx_dir.mkdir(parents=True, exist_ok=True)
     if reuse_frames:
@@ -281,8 +289,10 @@ def run_integrated_pipeline(
     print(f"  video      : {video}")
     print(f"  output     : {output}")
     print(f"  smplestx   : {smplestx_dir}")
-    print(f"  wilor      : {wilor_dir}")
-    print(f"  emoca      : {emoca_dir}")
+    print(f"  mode       : {'SMPLest-X only' if smplestx_only else 'SMPLest-X + WiLoR + EMOCA fusion'}")
+    if not smplestx_only:
+        print(f"  wilor      : {wilor_dir}")
+        print(f"  emoca      : {emoca_dir}")
     if frame_count is None:
         print(f"  frames     : {frame_source}")
     else:
@@ -297,14 +307,17 @@ def run_integrated_pipeline(
     print(f"  sx infer   : {'inference_mode' if smplestx_inference_mode else 'no_grad'}")
     print(f"  sx model   : {'single GPU module' if smplestx_single_gpu_model else 'DataParallel wrapper'}")
     print(f"  model exec : {'parallel per frame' if parallel_models else 'sequential/batched'}")
+    if smplestx_only:
+        print("  note       : WiLoR/EMOCA/fusion/render are skipped")
     if parallel_models and smplestx_batch_size > 1:
         print("  note       : --parallel_models runs SMPLest-X one frame at a time")
     print("#" * 72)
 
     step_start = time.perf_counter()
-    from video2smplx.runners.emoca import EMOCARunner
     from video2smplx.runners.smplestx import SmplestXRunner
-    from video2smplx.runners.wilor import WiLoRRunner
+    if not smplestx_only:
+        from video2smplx.runners.emoca import EMOCARunner
+        from video2smplx.runners.wilor import WiLoRRunner
     _add_step_timing(step_timings, "import_runners", step_start)
 
     print("\n[load] SMPLest-X")
@@ -320,14 +333,17 @@ def run_integrated_pipeline(
         model_batch_size=smplestx_batch_size,
     )
     _add_step_timing(step_timings, "load_smplestx", step_start)
-    print("\n[load] WiLoR")
-    step_start = time.perf_counter()
-    wilor = WiLoRRunner(wilor_dir, device=device)
-    _add_step_timing(step_timings, "load_wilor", step_start)
-    print("\n[load] EMOCA")
-    step_start = time.perf_counter()
-    emoca = EMOCARunner(emoca_dir, model_name=emoca_model, device=device)
-    _add_step_timing(step_timings, "load_emoca", step_start)
+    wilor = None
+    emoca = None
+    if not smplestx_only:
+        print("\n[load] WiLoR")
+        step_start = time.perf_counter()
+        wilor = WiLoRRunner(wilor_dir, device=device)
+        _add_step_timing(step_timings, "load_wilor", step_start)
+        print("\n[load] EMOCA")
+        step_start = time.perf_counter()
+        emoca = EMOCARunner(emoca_dir, model_name=emoca_model, device=device)
+        _add_step_timing(step_timings, "load_emoca", step_start)
 
     stats = FusionStats()
     fused_outputs: list[tuple[str, list]] = []
@@ -493,7 +509,8 @@ def run_integrated_pipeline(
                             raise batch_error
                         if not body:
                             frame_status = "empty_smplestx"
-                            fused_outputs.append((out_name, []))
+                            if not smplestx_only:
+                                fused_outputs.append((out_name, []))
                             if save_raw_smplestx:
                                 raw_smplestx_outputs.append((out_name, []))
                             stats.empty_smplestx_frames += 1
@@ -502,9 +519,13 @@ def run_integrated_pipeline(
                         body = _apply_stabilizers(body, frame.frame_id)
                         if save_raw_smplestx:
                             raw_smplestx_outputs.append((out_name, copy.deepcopy(body)))
+                        if smplestx_only:
+                            frame_status = "ok_smplestx_only"
+                            continue
 
                         model_start = time.perf_counter()
                         try:
+                            assert wilor is not None
                             hands = wilor.predict(frame)
                         finally:
                             frame_timings["wilor"] = time.perf_counter() - model_start
@@ -515,6 +536,7 @@ def run_integrated_pipeline(
 
                         model_start = time.perf_counter()
                         try:
+                            assert emoca is not None
                             face = emoca.predict(frame)
                         finally:
                             frame_timings["emoca"] = time.perf_counter() - model_start
@@ -538,7 +560,8 @@ def run_integrated_pipeline(
                         stats.warnings.append(
                             f"{frame.frame_id:06d}: {type(exc).__name__}: {exc}"
                         )
-                        fused_outputs.append((out_name, []))
+                        if not smplestx_only:
+                            fused_outputs.append((out_name, []))
                     finally:
                         total_seconds = (
                             smplestx_seconds_per_frame
@@ -576,16 +599,17 @@ def run_integrated_pipeline(
     if stats.total_frames == 0:
         raise RuntimeError(f"No frames decoded from: {video}")
 
-    step_start = time.perf_counter()
-    for out_name, fused in fused_outputs:
-        with open(fused_dir / out_name, "wb") as f:
-            pickle.dump(fused, f)
-    _add_step_timing(
-        step_timings,
-        "write_fused_params",
-        step_start,
-        {"files": len(fused_outputs), "directory": str(fused_dir)},
-    )
+    if not smplestx_only:
+        step_start = time.perf_counter()
+        for out_name, fused in fused_outputs:
+            with open(fused_dir / out_name, "wb") as f:
+                pickle.dump(fused, f)
+        _add_step_timing(
+            step_timings,
+            "write_fused_params",
+            step_start,
+            {"files": len(fused_outputs), "directory": str(fused_dir)},
+        )
 
     if save_raw_smplestx:
         step_start = time.perf_counter()
@@ -674,6 +698,64 @@ def run_integrated_pipeline(
         )
     )
     print(f"  inference_total={_format_timing_ms(inference_total_sec)}")
+
+    if smplestx_only:
+        step_timings.append(
+            {
+                "name": "render_total",
+                "seconds": 0.0,
+                "milliseconds": 0.0,
+                "metadata": {"skip_render": True, "reason": "smplestx_only"},
+            }
+        )
+        pipeline_total_sec = time.perf_counter() - pipeline_start
+        timing_report["render_total_sec"] = None
+        timing_report["render_total_ms"] = None
+        timing_report["pipeline_total_sec"] = pipeline_total_sec
+        timing_report["pipeline_total_ms"] = pipeline_total_sec * 1000
+        timing_report["pipeline_steps"] = step_timings
+        step_start = time.perf_counter()
+        with open(timing_report_path, "w") as f:
+            json.dump(timing_report, f, indent=2)
+        _add_step_timing(
+            step_timings,
+            "write_final_timing_report",
+            step_start,
+            {"path": str(timing_report_path)},
+        )
+        timing_report["pipeline_steps"] = step_timings
+        with open(timing_report_path, "w") as f:
+            json.dump(timing_report, f, indent=2)
+
+        summary = {
+            "name": run_name,
+            "frames": stats.total_frames,
+            "output": str(output),
+            "smplestx_params": str(raw_smplestx_dir),
+            "smplestx_report": str(report_path),
+            "timing_report": str(timing_report_path),
+            "stats": stats.to_dict(),
+            "timings": timing_report,
+            "smplestx_only": True,
+            "smplestx_optimization": {
+                "detector_stride": max(1, smplestx_detector_stride),
+                "batch_size": smplestx_batch_size,
+                "inference_mode": smplestx_inference_mode,
+                "single_gpu_model": smplestx_single_gpu_model,
+            },
+        }
+        print("\n" + "#" * 72)
+        print("  SMPLEST-X ONLY PIPELINE COMPLETE")
+        print(f"  SMPLest-X params : {raw_smplestx_dir}")
+        print(f"  SMPLest-X report : {report_path}")
+        print(f"  Timing report    : {timing_report_path}")
+        print(f"  Inference time   : {_format_timing_ms(inference_total_sec)}")
+        print(f"  Total time       : {_format_timing_ms(pipeline_total_sec)}")
+        print("\n[pipeline steps]")
+        for step in step_timings:
+            print(f"  {step['name']}: {_format_timing_ms(step['seconds'])}")
+        print("#" * 72)
+        return summary
 
     if valid_fused_frames == 0:
         raise RuntimeError(
@@ -972,6 +1054,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also save SMPLest-X-only per-frame PKLs to <output>/smplestx_params before fusion.",
     )
     parser.add_argument(
+        "--smplestx_only",
+        action="store_true",
+        help="Run only SMPLest-X and save <output>/smplestx_params; skip WiLoR, EMOCA, fusion, and render.",
+    )
+    parser.add_argument(
         "--stabilize_lower_body",
         action="store_true",
         help="Hold primary person's lower-body SMPL-X body_pose joints from the first valid frame.",
@@ -1031,6 +1118,7 @@ def main() -> None:
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,
         parallel_models=args.parallel_models,
         save_raw_smplestx=args.save_raw_smplestx,
+        smplestx_only=args.smplestx_only,
     )
 
 
