@@ -30,9 +30,9 @@ echo "[check] params subdir: ${PARAMS_SUBDIR}"
 echo "[check] model path: ${MODEL_PATH}"
 echo "[check] output dir: ${OUTPUT_DIR}"
 
-FOUND_COUNT=$(find "${PRED_ROOT}" -path "*/${PARAMS_SUBDIR}/*_params.pkl" | head -100 | wc -l)
-echo "[check] first-100 raw SMPLest-X PKL count: ${FOUND_COUNT}"
-if [ "${FOUND_COUNT}" -eq 0 ]; then
+FIRST_PKL=$(find "${PRED_ROOT}" -path "*/${PARAMS_SUBDIR}/*_params.pkl" -print -quit)
+echo "[check] first raw SMPLest-X PKL: ${FIRST_PKL:-none}"
+if [ -z "${FIRST_PKL}" ]; then
   echo "[error] No ${PARAMS_SUBDIR} PKLs found. Rerun integrated pipeline with --save_raw_smplestx first." >&2
   exit 2
 fi
