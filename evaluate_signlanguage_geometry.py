@@ -328,6 +328,11 @@ class NumpySMPLX:
         self.visible_upper_vertex_indices = np.flatnonzero(
             np.isin(dominant_joint, self.visible_upper_joint_indices)
         )
+        self.dexavatar_upper_minus_face_vertex_indices = np.setdiff1d(
+            self.visible_upper_vertex_indices,
+            self.face_vertex_indices,
+            assume_unique=True,
+        )
         self.left_hand_vertex_indices = np.flatnonzero(
             np.isin(dominant_joint, np.asarray([20, *range(25, 40)]))
         )
@@ -535,6 +540,7 @@ def geometry_metrics(
     visible_j = model.visible_upper_joint_indices
     visible_v = model.visible_upper_vertex_indices
     face_v = model.face_vertex_indices
+    dex_upper_minus_face_v = model.dexavatar_upper_minus_face_vertex_indices
 
     hand_joint_errors = []
     pa_hand_joint_errors = []
@@ -604,6 +610,9 @@ def geometry_metrics(
         "face_pa_mpvpe_mm": mean_pa_error(predicted_vertices, target_vertices, face_v) * mm,
         "raw_mpjpe_mm": float(np.mean(raw_joint_error) * mm),
         "raw_mpvpe_mm": float(np.mean(raw_vertex_error) * mm),
+        "dex_ubody_minus_face_tr_v2v_mm": float(np.mean(raw_vertex_error[dex_upper_minus_face_v]) * mm),
+        "dex_left_hand_tr_v2v_mm": float(np.mean(raw_vertex_error[model.left_hand_vertex_indices]) * mm),
+        "dex_right_hand_tr_v2v_mm": float(np.mean(raw_vertex_error[model.right_hand_vertex_indices]) * mm),
     }
     return metrics
 
@@ -633,6 +642,9 @@ METRICS = (
     "face_pa_mpvpe_mm",
     "raw_mpjpe_mm",
     "raw_mpvpe_mm",
+    "dex_ubody_minus_face_tr_v2v_mm",
+    "dex_left_hand_tr_v2v_mm",
+    "dex_right_hand_tr_v2v_mm",
 )
 
 
@@ -884,6 +896,10 @@ def main() -> None:
             "hands_pa_mpjpe_mm": "PA fitted independently for each hand skeleton including wrist",
             "visible_upper_*": "upper-body/head/hand subset useful for cropped signing videos",
             "raw_*": "no translation, rotation, or scale alignment",
+            "dex_*_tr_v2v_mm": (
+                "DexAvatar-style regional raw vertex-to-vertex error; "
+                "upper-body mask is visible upper-body vertices excluding expression/face vertices"
+            ),
         },
         "joint_sets": {
             "all": "55 native SMPL-X joints",
@@ -895,6 +911,7 @@ def main() -> None:
         },
         "vertex_masks": {
             "visible_upper_count": int(len(model.visible_upper_vertex_indices)),
+            "dex_ubody_minus_face_count": int(len(model.dexavatar_upper_minus_face_vertex_indices)),
             "face_count": int(len(model.face_vertex_indices)),
             "left_hand_count": int(len(model.left_hand_vertex_indices)),
             "right_hand_count": int(len(model.right_hand_vertex_indices)),
@@ -923,6 +940,9 @@ def main() -> None:
         "body_pa_mpjpe_mm_mean",
         "hand_mpjpe_mm_mean",
         "hand_pa_mpjpe_mm_mean",
+        "dex_ubody_minus_face_tr_v2v_mm_mean",
+        "dex_left_hand_tr_v2v_mm_mean",
+        "dex_right_hand_tr_v2v_mm_mean",
     ]
     print(",".join(fields))
     for row in summary_rows:
