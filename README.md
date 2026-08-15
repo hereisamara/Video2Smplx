@@ -34,6 +34,19 @@ For a deeper system-level explanation of how the three projects interact, what e
 
 ---
 
+## Sample Result
+
+The example below shows a monocular input clip and its fused, stabilized SMPL-X
+render. The previews and downloadable videos are synchronized by source-frame
+index for direct visual comparison.
+
+| Input video | Fused SMPL-X output |
+|:---:|:---:|
+| [![Input video preview](docs/media/input-preview.gif)](docs/media/input-sample.mp4) | [![Fused SMPL-X output preview](docs/media/output-preview.gif)](docs/media/output-sample.mp4) |
+| [Open the full input MP4](docs/media/input-sample.mp4) | [Open the full output MP4](docs/media/output-sample.mp4) |
+
+---
+
 ## SignLanguage Evaluation Status
 
 The current SignLanguage experiments use the dataset layout below and evaluate
