@@ -34,6 +34,96 @@ For a deeper system-level explanation of how the three projects interact, what e
 
 ---
 
+## SignLanguage Evaluation Status
+
+The current SignLanguage experiments use the dataset layout below and evaluate
+predicted SMPL-X PKLs against the provided SignLanguage SMPL-X annotations:
+
+```text
+datasets/videos/SignLanguage/SignLanguage_S*/SignLanguage_S*.mp4
+datasets/annotations/SignLanguage/{keypoint_annotation,smplx_annotation}.json
+outputs_*/SignLanguage_S*/<params_subdir>/*_params.pkl
+```
+
+Latest usable overall results on the local SignLanguage setup:
+
+| Result | Frames | MPJPE | PA-MPJPE | MPVPE | PA-MPVPE | Body MPJPE | Body PA-MPJPE | Hand MPJPE | Hand PA-MPJPE |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Raw SMPLest-X only | 48,561 | 105.09 | 48.79 | 112.51 | 31.23 | 95.64 | 26.49 | 109.73 | 26.96 |
+| Fused no stabilization | 47,470 | 103.13 | 47.82 | 111.09 | 30.40 | 94.93 | 26.51 | 106.75 | 29.79 |
+| Final corrected, global + hand | 48,443 | 77.02 | 40.00 | 78.49 | 28.26 | 70.22 | 26.51 | 81.23 | 14.62 |
+
+The final corrected result mainly improves absolute global/mesh alignment and
+hand pose. PA-MPVPE and body PA-MPJPE improve less, so this should be described
+as an in-domain post-processing improvement rather than a general UBody SOTA
+claim.
+
+Additional final corrected hand metrics:
+
+| Metric | Value |
+|---|---:|
+| Hands wrist MPVPE | 24.01 |
+| Hands PA-MPVPE | 3.19 |
+| Hands wrist MPJPE | 23.90 |
+| Hands PA-MPJPE | 2.26 |
+
+### Raw SMPLest-X-Only Baseline
+
+Use `--smplestx_only` to run the integrated pipeline as a raw SMPLest-X
+baseline. This skips WiLoR, EMOCA, fusion, and rendering, and writes only:
+
+```text
+<output>/smplestx_params/*_params.pkl
+```
+
+On the LANTA server, run the Slurm array launcher:
+
+```bash
+sbatch slurm_signlanguage_smplestx_only_gpu.sh
+```
+
+By default, it writes outputs and logs under project storage to avoid `/home`
+quota pressure:
+
+```text
+/project/lt200246-mmacma/khtun/outputs_smplestx_only_signlanguage
+/project/lt200246-mmacma/khtun/logs_smplestx_only_signlanguage
+```
+
+Evaluate the generated raw SMPLest-X PKLs:
+
+```bash
+PRED_ROOT=/project/lt200246-mmacma/khtun/outputs_smplestx_only_signlanguage \
+PARAMS_SUBDIR=smplestx_params \
+OUTPUT_DIR=/project/lt200246-mmacma/khtun/outputs_smplestx_only_signlanguage/evaluation/smplx_female_raw_smplestx \
+sbatch slurm_evaluate_raw_smplestx_signlanguage.sh
+```
+
+### DexAvatar-Style Sign-Language Comparison
+
+`evaluate_signlanguage_geometry.py` also reports DexAvatar-style regional raw
+vertex-to-vertex fields:
+
+```text
+dex_ubody_minus_face_tr_v2v_mm_mean
+dex_left_hand_tr_v2v_mm_mean
+dex_right_hand_tr_v2v_mm_mean
+```
+
+These are protocol-style regional V2V metrics on this SignLanguage dataset.
+They are not official SGNify benchmark numbers, but they allow a closer
+comparison format with sign-language reconstruction papers such as DexAvatar.
+
+Print the comparison table from any `geometry_summary.csv`:
+
+```bash
+python compare_dexavatar_style_results.py \
+  /path/to/evaluation/geometry_summary.csv \
+  --label "Ours corrected on SignLanguage"
+```
+
+---
+
 ## Directory Structure
 
 ```
