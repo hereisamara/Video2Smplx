@@ -1,24 +1,24 @@
 # Video Output Comparison README
 
-This README is for subjective review of the downloaded `SignLanguage_S2`
-ablation videos. Each variant includes:
+This README is for subjective review of the included `SignLanguage_S2` ablation
+videos. Each variant includes:
 
 - `smplx_params.npz`: combined SMPL-X parameters;
 - `rendered/smplx_render.mp4`: rendered SMPL-X mesh only;
 - `side_by_side_input_render.mp4`: input video next to rendered output.
 
-The source downloaded ablation folder is:
+The ablation media used by this README is stored in the repository:
 
 ```text
-/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/
+docs/media/ablation_s2/
 ```
 
-The exact standalone original S2 input MP4 is not inside the downloaded
-ablation folder. Use each `side_by_side_input_render.mp4` for exact
-input-vs-output review. The packaged sample input video is available at:
+The exact standalone original S2 input MP4 is not required for this review. Use
+each `side_by_side_input_render.mp4` for exact input-vs-output comparison. The
+packaged sample input video is also available at:
 
 ```text
-/Users/khineaindrayhtun/Files/CS/pose-estimation/Video2Smplx/delivery/sample/input-sample.mp4
+delivery/sample/input-sample.mp4
 ```
 
 ## Recommended Viewing Order

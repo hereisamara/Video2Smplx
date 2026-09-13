@@ -195,14 +195,9 @@ For ablation videos generated on the server, review:
 /project/lt200246-mmacma/khtun/video2smplx_ablation_samples/<variant>/<sequence>/final_*/side_by_side_input_render.mp4
 ```
 
-The downloaded S2 ablation sample set has been verified locally at:
-
-```text
-/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/
-```
-
-It contains all six ablation variants, with `smplx_params.npz`, rendered SMPL-X
-MP4, side-by-side MP4, runtime reports, and geometry summaries for each variant.
+The S2 ablation sample set is included under `docs/media/ablation_s2/`. It
+contains all six ablation variants, with preview images, side-by-side MP4s,
+rendered-only MP4s, and `smplx_params.npz` for each variant.
 The compact result table is saved as
 `delivery/results/signlanguage_s2_ablation_sample_summary.csv`.
 
@@ -212,8 +207,8 @@ For a reviewer-facing video table, open:
 README_VIDEO_OUTPUT_COMPARISON.md
 ```
 
-That README embeds GitHub-visible preview images under
-`docs/media/ablation_s2/` and links to the matching side-by-side MP4 files.
+That README embeds GitHub-visible preview images and links to the matching
+repo-contained side-by-side MP4 files.
 
 These qualitative outputs should be used together with the quantitative tables,
 because a lower MPVPE does not always reveal temporal smoothness or visible hand
@@ -238,7 +233,7 @@ The current held-out SignLanguage-section ablation is stored in
 All values are millimeters. The best current held-out setting is
 `2D upper scale 0.75`.
 
-The downloaded S2 sample ablation confirms the same selection for subjective
+The included S2 sample ablation confirms the same selection for subjective
 review. On S2, `accurate_2d` without legacy stabilization gives the lowest MPVPE
 and visible-upper MPVPE:
 
@@ -377,6 +372,6 @@ extract_signlanguage_yolo_pose_keypoints.py
 render_signlanguage_*.py
 ```
 
-Do not include temporary server logs, partial experiment folders, old zip files,
-`.DS_Store`, local caches, or large model checkpoints unless the contract
-explicitly requires physical media to include model weights.
+Do not include temporary server logs, temporary archives, partial experiment
+folders, `.DS_Store`, local caches, or large model checkpoints unless the
+contract explicitly requires physical media to include model weights.

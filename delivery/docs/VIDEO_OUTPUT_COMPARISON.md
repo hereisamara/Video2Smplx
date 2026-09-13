@@ -6,7 +6,6 @@ See the repository-root README:
 README_VIDEO_OUTPUT_COMPARISON.md
 ```
 
-It lists the downloaded `SignLanguage_S2` ablation videos, including input vs
-output side-by-side MP4s, rendered-only MP4s, `smplx_params.npz`, and the
-matching objective metrics.
-
+It lists the included `SignLanguage_S2` ablation videos, including input vs
+output side-by-side MP4s, rendered-only MP4s, `smplx_params.npz`, preview
+images, and the matching objective metrics.

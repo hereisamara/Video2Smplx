@@ -19,6 +19,11 @@ cp "${ROOT_DIR}/README_DELIVERY.md" "${DOC_SET}/README_DELIVERY.md"
 cp "${ROOT_DIR}/README_TOR.md" "${DOC_SET}/README_TOR.md"
 cp "${ROOT_DIR}/README_VIDEO_OUTPUT_COMPARISON.md" "${DOC_SET}/README_VIDEO_OUTPUT_COMPARISON.md"
 
+if [ -d "${ROOT_DIR}/docs/media/ablation_s2" ]; then
+  mkdir -p "${DOC_SET}/docs/media"
+  cp -R "${ROOT_DIR}/docs/media/ablation_s2" "${DOC_SET}/docs/media/ablation_s2"
+fi
+
 if [ -d "${DELIVERY_DIR}/final_outputs" ]; then
   cp -R "${DELIVERY_DIR}/final_outputs" "${DOC_SET}/final_outputs"
 fi

@@ -26,13 +26,13 @@ and sample results needed to run and verify the sign-language SMPL-X pipeline.
 | Objective result tables | `delivery/results/` |
 | Document set build script | `delivery/scripts/build_document_set.sh` |
 | Flash-drive copy script | `delivery/scripts/prepare_flash_drive_set.sh` |
-| Server delivery overlay installer | `delivery/scripts/install_delivery_overlay.sh` |
 | Base integrated server test | `delivery/scripts/slurm_test_delivery_integrated_pipeline.sh` |
 | Final postprocessed server test | `delivery/scripts/slurm_test_delivery_final_postprocessed_pipeline.sh` |
 | Final postprocessed runtime benchmark | `delivery/scripts/slurm_benchmark_delivery_final_postprocessed_pipeline.sh` |
 | Fair FPS with/without post-processing benchmark | `delivery/scripts/slurm_benchmark_delivery_fair_fps.sh` |
 | One-process integrated postprocessed benchmark | `delivery/scripts/slurm_benchmark_integrated_postprocessed_oneprocess.sh` |
 | Ablation sample output generator | `delivery/scripts/slurm_generate_ablation_samples.sh` |
+| Included ablation video comparison media | `docs/media/ablation_s2/` |
 | Supporting SignLanguage post-processing scripts | root-level `apply_signlanguage_*.py`, `build_signlanguage_*.py`, `train_signlanguage_*.py` |
 | Supporting SignLanguage evaluation scripts | root-level `evaluate_signlanguage_*.py` and `extract_signlanguage_yolo_pose_keypoints.py` |
 
