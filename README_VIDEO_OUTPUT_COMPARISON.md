@@ -7,15 +7,15 @@ ablation videos. Each variant includes:
 - `rendered/smplx_render.mp4`: rendered SMPL-X mesh only;
 - `side_by_side_input_render.mp4`: input video next to rendered output.
 
-The downloaded ablation folder is:
+The source downloaded ablation folder is:
 
 ```text
 /Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/
 ```
 
-The exact standalone original S2 input MP4 is not inside this downloaded folder.
-Use each `side_by_side_input_render.mp4` for exact input-vs-output review. The
-packaged sample input video is available at:
+The exact standalone original S2 input MP4 is not inside the downloaded
+ablation folder. Use each `side_by_side_input_render.mp4` for exact
+input-vs-output review. The packaged sample input video is available at:
 
 ```text
 /Users/khineaindrayhtun/Files/CS/pose-estimation/Video2Smplx/delivery/sample/input-sample.mp4
@@ -30,57 +30,58 @@ packaged sample input video is available at:
 5. `accurate_2d`: final selected 2D-guided upper-body correction.
 6. `accurate_2d_stab`: final 2D-guided correction with legacy stabilization.
 
-## Inline Input-Vs-Output Previews
+## GitHub-Visible Input-Vs-Output Previews
 
-The videos below are the side-by-side files. The left side is the input video;
-the right side is the rendered SMPL-X output for that ablation setting.
+The images below are preview frames from the side-by-side files. The left side
+is the input video; the right side is the rendered SMPL-X output for that
+ablation setting. Use the MP4 links under each preview for playback.
 
 ### Base No Stabilization
 
-<video src="/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_no_stab/SignLanguage_S2/final_base/side_by_side_input_render.mp4" controls muted loop width="720"></video>
+![Base no stabilization preview](docs/media/ablation_s2/base_no_stab/side_by_side_input_render.mp4.png)
 
-[Open MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_no_stab/SignLanguage_S2/final_base/side_by_side_input_render.mp4)
+[Open repo MP4](docs/media/ablation_s2/base_no_stab/side_by_side_input_render.mp4)
 
 ### Base With Legacy Stabilization
 
-<video src="/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_stab/SignLanguage_S2/final_base/side_by_side_input_render.mp4" controls muted loop width="720"></video>
+![Base with legacy stabilization preview](docs/media/ablation_s2/base_stab/side_by_side_input_render.mp4.png)
 
-[Open MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_stab/SignLanguage_S2/final_base/side_by_side_input_render.mp4)
+[Open repo MP4](docs/media/ablation_s2/base_stab/side_by_side_input_render.mp4)
 
 ### Global Corrector
 
-<video src="/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/global_only/SignLanguage_S2/final_global/side_by_side_input_render.mp4" controls muted loop width="720"></video>
+![Global corrector preview](docs/media/ablation_s2/global_only/side_by_side_input_render.mp4.png)
 
-[Open MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/global_only/SignLanguage_S2/final_global/side_by_side_input_render.mp4)
+[Open repo MP4](docs/media/ablation_s2/global_only/side_by_side_input_render.mp4)
 
 ### Fast Global Plus Hand Corrector
 
-<video src="/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/fast_global_hand/SignLanguage_S2/final_fast/side_by_side_input_render.mp4" controls muted loop width="720"></video>
+![Fast global plus hand corrector preview](docs/media/ablation_s2/fast_global_hand/side_by_side_input_render.mp4.png)
 
-[Open MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/fast_global_hand/SignLanguage_S2/final_fast/side_by_side_input_render.mp4)
+[Open repo MP4](docs/media/ablation_s2/fast_global_hand/side_by_side_input_render.mp4)
 
 ### Accurate 2D-Guided Corrector
 
-<video src="/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d/SignLanguage_S2/final_postprocessed/side_by_side_input_render.mp4" controls muted loop width="720"></video>
+![Accurate 2D-guided corrector preview](docs/media/ablation_s2/accurate_2d/side_by_side_input_render.mp4.png)
 
-[Open MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d/SignLanguage_S2/final_postprocessed/side_by_side_input_render.mp4)
+[Open repo MP4](docs/media/ablation_s2/accurate_2d/side_by_side_input_render.mp4)
 
 ### Accurate 2D-Guided Corrector With Legacy Stabilization
 
-<video src="/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d_stab/SignLanguage_S2/final_postprocessed/side_by_side_input_render.mp4" controls muted loop width="720"></video>
+![Accurate 2D-guided corrector with legacy stabilization preview](docs/media/ablation_s2/accurate_2d_stab/side_by_side_input_render.mp4.png)
 
-[Open MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d_stab/SignLanguage_S2/final_postprocessed/side_by_side_input_render.mp4)
+[Open repo MP4](docs/media/ablation_s2/accurate_2d_stab/side_by_side_input_render.mp4)
 
 ## Video Comparison Table
 
 | Variant | What It Shows | Side-by-side Input vs Output | Rendered Mesh Only | SMPL-X Params |
 | --- | --- | --- | --- | --- |
-| `base_no_stab` | Base fusion, no stabilization, no post-processing | [side-by-side MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_no_stab/SignLanguage_S2/final_base/side_by_side_input_render.mp4) | [render MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_no_stab/SignLanguage_S2/final_base/rendered/smplx_render.mp4) | [smplx_params.npz](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_no_stab/SignLanguage_S2/final_base/smplx_params.npz) |
-| `base_stab` | Base fusion with old global and shape stabilization | [side-by-side MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_stab/SignLanguage_S2/final_base/side_by_side_input_render.mp4) | [render MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_stab/SignLanguage_S2/final_base/rendered/smplx_render.mp4) | [smplx_params.npz](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/base_stab/SignLanguage_S2/final_base/smplx_params.npz) |
-| `global_only` | Base fusion plus learned `global_orient` and `transl` correction | [side-by-side MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/global_only/SignLanguage_S2/final_global/side_by_side_input_render.mp4) | [render MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/global_only/SignLanguage_S2/final_global/rendered/smplx_render.mp4) | [smplx_params.npz](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/global_only/SignLanguage_S2/final_global/smplx_params.npz) |
-| `fast_global_hand` | Global correction plus learned hand wrist/finger correction | [side-by-side MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/fast_global_hand/SignLanguage_S2/final_fast/side_by_side_input_render.mp4) | [render MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/fast_global_hand/SignLanguage_S2/final_fast/rendered/smplx_render.mp4) | [smplx_params.npz](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/fast_global_hand/SignLanguage_S2/final_fast/smplx_params.npz) |
-| `accurate_2d` | Final selected mode: global plus hand plus YOLO 2D-guided upper-body correction | [side-by-side MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d/SignLanguage_S2/final_postprocessed/side_by_side_input_render.mp4) | [render MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d/SignLanguage_S2/final_postprocessed/rendered/smplx_render.mp4) | [smplx_params.npz](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d/SignLanguage_S2/final_postprocessed/smplx_params.npz) |
-| `accurate_2d_stab` | Final 2D-guided mode with old global and shape stabilization enabled | [side-by-side MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d_stab/SignLanguage_S2/final_postprocessed/side_by_side_input_render.mp4) | [render MP4](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d_stab/SignLanguage_S2/final_postprocessed/rendered/smplx_render.mp4) | [smplx_params.npz](/Users/khineaindrayhtun/Downloads/video2smplx_ablation_samples/accurate_2d_stab/SignLanguage_S2/final_postprocessed/smplx_params.npz) |
+| `base_no_stab` | Base fusion, no stabilization, no post-processing | [side-by-side MP4](docs/media/ablation_s2/base_no_stab/side_by_side_input_render.mp4) | [render MP4](docs/media/ablation_s2/base_no_stab/smplx_render.mp4) | [smplx_params.npz](docs/media/ablation_s2/base_no_stab/smplx_params.npz) |
+| `base_stab` | Base fusion with old global and shape stabilization | [side-by-side MP4](docs/media/ablation_s2/base_stab/side_by_side_input_render.mp4) | [render MP4](docs/media/ablation_s2/base_stab/smplx_render.mp4) | [smplx_params.npz](docs/media/ablation_s2/base_stab/smplx_params.npz) |
+| `global_only` | Base fusion plus learned `global_orient` and `transl` correction | [side-by-side MP4](docs/media/ablation_s2/global_only/side_by_side_input_render.mp4) | [render MP4](docs/media/ablation_s2/global_only/smplx_render.mp4) | [smplx_params.npz](docs/media/ablation_s2/global_only/smplx_params.npz) |
+| `fast_global_hand` | Global correction plus learned hand wrist/finger correction | [side-by-side MP4](docs/media/ablation_s2/fast_global_hand/side_by_side_input_render.mp4) | [render MP4](docs/media/ablation_s2/fast_global_hand/smplx_render.mp4) | [smplx_params.npz](docs/media/ablation_s2/fast_global_hand/smplx_params.npz) |
+| `accurate_2d` | Final selected mode: global plus hand plus YOLO 2D-guided upper-body correction | [side-by-side MP4](docs/media/ablation_s2/accurate_2d/side_by_side_input_render.mp4) | [render MP4](docs/media/ablation_s2/accurate_2d/smplx_render.mp4) | [smplx_params.npz](docs/media/ablation_s2/accurate_2d/smplx_params.npz) |
+| `accurate_2d_stab` | Final 2D-guided mode with old global and shape stabilization enabled | [side-by-side MP4](docs/media/ablation_s2/accurate_2d_stab/side_by_side_input_render.mp4) | [render MP4](docs/media/ablation_s2/accurate_2d_stab/smplx_render.mp4) | [smplx_params.npz](docs/media/ablation_s2/accurate_2d_stab/smplx_params.npz) |
 
 ## Objective Metrics For The Same Videos
 

@@ -212,6 +212,9 @@ For a reviewer-facing video table, open:
 README_VIDEO_OUTPUT_COMPARISON.md
 ```
 
+That README embeds GitHub-visible preview images under
+`docs/media/ablation_s2/` and links to the matching side-by-side MP4 files.
+
 These qualitative outputs should be used together with the quantitative tables,
 because a lower MPVPE does not always reveal temporal smoothness or visible hand
 quality.
