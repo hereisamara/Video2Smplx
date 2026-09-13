@@ -2,6 +2,11 @@
 
 An end-to-end pipeline for reconstructing 3D full-body animations from monocular video or images. The system integrates three specialist models — **SMPLest-X** (body), **WiLoR** (hands), and **EMOCA** (face) — to produce high-quality SMPL-X parameter files and a rendered 3D animation video.
 
+> For project delivery, TOR mapping, setup commands, ablation sample outputs,
+> objective SignLanguage metrics, and UBody literature comparison, start with
+> [README_DELIVERY.md](README_DELIVERY.md). The original sample preview below is
+> kept for quick visual inspection.
+
 ---
 
 ## Overview

@@ -1,0 +1,4 @@
+method,frames,mpjpe_mm,pa_mpjpe_mm,mpvpe_mm,pa_mpvpe_mm,body_mpjpe_mm,body_pa_mpjpe_mm,hand_mpjpe_mm,hand_pa_mpjpe_mm,hands_wrist_mpvpe_mm,hands_pa_mpvpe_mm,hands_wrist_mpjpe_mm,hands_pa_mpjpe_mm,notes
+Raw SMPLest-X only,48561,105.09,48.79,112.51,31.23,95.64,26.49,109.73,26.96,,,,,Raw SMPLest-X-only evaluation produced by smplestx_params
+Fusion no stabilization,47470,103.13,47.82,111.09,30.40,94.93,26.51,106.75,29.79,,,,,Fused predictions without stabilization
+Final corrected global plus hand,48443,77.02,40.00,78.49,28.26,70.22,26.51,81.23,14.62,24.01,3.19,23.90,2.26,Best full usable-set result before the later held-out 2D upper-body ablation

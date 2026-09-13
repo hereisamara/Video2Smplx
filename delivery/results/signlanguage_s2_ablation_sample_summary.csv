@@ -1,0 +1,7 @@
+sequence,variant,postprocess_mode,stabilized,frames,total_fps,no_initial_load_no_render_fps,steady_state_model_fps,smplx_npz_mb,rendered_video_mb,side_by_side_video_mb,mpjpe_mm,pa_mpjpe_mm,mpvpe_mm,pa_mpvpe_mm,visible_upper_mpvpe_mm,hand_wrist_mpvpe_mm,hand_pa_mpvpe_mm,face_mpvpe_mm,final_output_subdir
+SignLanguage_S2,base_no_stab,none,none,111,0.61,2.30,6.84,0.18,0.27,1.26,100.86,49.08,115.57,28.42,119.61,35.07,17.49,13.74,base_no_stab/SignLanguage_S2/final_base
+SignLanguage_S2,base_stab,none,global+shape,111,1.76,3.39,6.74,0.17,0.26,1.25,144.19,49.08,168.89,28.40,171.25,38.04,17.49,23.11,base_stab/SignLanguage_S2/final_base
+SignLanguage_S2,global_only,global,none,111,1.70,3.13,6.70,0.18,0.27,1.26,84.48,49.09,83.20,28.42,87.26,32.42,17.49,8.00,global_only/SignLanguage_S2/final_global
+SignLanguage_S2,fast_global_hand,fast,none,111,1.69,3.12,6.78,0.18,0.28,1.27,87.69,51.40,84.23,28.92,88.45,19.49,2.02,8.00,fast_global_hand/SignLanguage_S2/final_fast
+SignLanguage_S2,accurate_2d,accurate,none,111,1.68,3.12,6.85,0.18,0.27,1.26,40.56,27.97,33.84,21.00,28.85,12.46,2.00,9.63,accurate_2d/SignLanguage_S2/final_postprocessed
+SignLanguage_S2,accurate_2d_stab,accurate,global+shape,111,1.69,3.11,6.80,0.17,0.26,1.25,55.33,39.57,38.92,26.29,36.28,23.46,2.27,7.91,accurate_2d_stab/SignLanguage_S2/final_postprocessed

@@ -1,0 +1,86 @@
+# Required Model Setup And Download Instructions
+
+Model files are not redistributed in this delivery unless the license permits it.
+Place all model files in the existing project subdirectories below.
+
+## SMPLest-X
+
+Expected directory:
+
+```text
+SMPLest-X-Inference/
+  pretrained_models/
+    smplest_x_h/
+      config_base.py
+      smplest_x_h.pth.tar
+    yolov8x.pt
+  human_models/
+    human_model_files/
+      smplx/
+        SMPLX_NEUTRAL.npz
+        SMPLX_MALE.npz
+        SMPLX_FEMALE.npz
+        SMPLX_to_J14.pkl
+        MANO_SMPLX_vertex_ids.pkl
+        SMPL-X__FLAME_vertex_ids.npy
+```
+
+Download SMPLest-X from the official project/repository and follow its license.
+Download SMPL-X model files from the official SMPL-X website after accepting the
+SMPL-X license.
+
+## WiLoR
+
+Expected directory:
+
+```text
+WiLoR-Inference/
+  pretrained_models/
+    wilor_final.ckpt
+    detector.pt
+    model_config.yaml
+  mano_data/
+    mano_mean_params.npz
+    MANO_RIGHT.pkl
+```
+
+Download WiLoR weights from the official WiLoR repository or model page. Download
+MANO files from the official MANO website after accepting the MANO license.
+
+## EMOCA
+
+Expected directory:
+
+```text
+EMOCA-Inference/
+  assets/
+    EMOCA/models/EMOCA_v2_lr_mse_20/
+    DECA/data/deca_model.tar
+    FLAME/geometry/generic_model.pkl
+    FLAME/geometry/landmark_embedding.npy
+    FLAME/geometry/mediapipe_landmark_embedding.npz
+    FLAME/geometry/head_template.obj
+    FLAME/geometry/fixed_uv_displacements/fixed_displacement_256.npy
+    FLAME/mask/uv_face_mask.png
+    FLAME/mask/uv_face_eye_mask.png
+```
+
+Download EMOCA assets from the official EMOCA instructions. Download FLAME assets
+from the official FLAME website after accepting the FLAME license.
+
+## Post-Processing Corrector Models
+
+The research correctors trained for SignLanguage are optional post-processors.
+They are not required for the four base CLI programs, but they are used for the
+best reported result.
+
+Expected server locations from the experiments:
+
+```text
+/project/lt200246-mmacma/khtun/signlanguage_global_correction_outputs/
+/project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs/
+/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/
+```
+
+Use the matching `apply_signlanguage_*correction.py` scripts when reproducing
+the corrected benchmark pipeline.

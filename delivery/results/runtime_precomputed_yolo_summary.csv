@@ -1,0 +1,8 @@
+category,variant_or_stage,total_seconds,ms_per_frame,total_fps,no_render_fps,no_initial_load_total_fps,no_initial_load_no_render_fps,steady_state_model_fps,notes
+postprocess,Global corrector,1.41,3.13,,,,,,S2/S3/S4 with precomputed YOLO keypoints
+postprocess,Hand corrector,2.25,5.00,,,,,,S2/S3/S4 with precomputed YOLO keypoints
+postprocess,Load precomputed YOLO keypoints,0.045,0.10,,,,,,JSON load only; no YOLO inference
+postprocess,2D upper-body corrector,2.19,4.86,,,,,,S2/S3/S4 with precomputed YOLO keypoints
+postprocess,Total post-processing,5.90,13.10,,,,,,Global plus hand plus precomputed-2D upper-body correction
+oneprocess,Base pipeline,,,1.12,1.20,,2.68,6.70,One-process benchmark; steady FPS excludes warmup frames
+oneprocess,Accurate postprocessed pipeline,,,1.98,2.22,,3.57,6.76,One-process benchmark with precomputed YOLO keypoints
