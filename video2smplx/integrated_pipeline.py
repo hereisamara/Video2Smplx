@@ -199,6 +199,9 @@ def run_integrated_pipeline(
     parallel_models: bool = False,
     save_raw_smplestx: bool = False,
     smplestx_only: bool = False,
+    write_fused_params: bool = True,
+    return_fused_outputs: bool = False,
+    per_frame_timing_log_interval: int = 1,
 ) -> dict:
     from tqdm import tqdm
 
@@ -394,15 +397,22 @@ def run_integrated_pipeline(
         if metadata:
             timing_record.update(metadata)
         per_frame_timings.append(timing_record)
-        tqdm.write(
-            "[timing] "
-            f"frame={frame.frame_id:06d} "
-            f"smplestx={_format_timing_ms(frame_timings['smplestx'])} "
-            f"wilor={_format_timing_ms(frame_timings['wilor'])} "
-            f"emoca={_format_timing_ms(frame_timings['emoca'])} "
-            f"total={_format_timing_ms(total_seconds)} "
-            f"status={frame_status}"
-        )
+        timing_index = len(per_frame_timings)
+        log_interval = max(0, int(per_frame_timing_log_interval))
+        if log_interval and (
+            timing_index == 1
+            or timing_index % log_interval == 0
+            or timing_index == frame_count
+        ):
+            tqdm.write(
+                "[timing] "
+                f"frame={frame.frame_id:06d} "
+                f"smplestx={_format_timing_ms(frame_timings['smplestx'])} "
+                f"wilor={_format_timing_ms(frame_timings['wilor'])} "
+                f"emoca={_format_timing_ms(frame_timings['emoca'])} "
+                f"total={_format_timing_ms(total_seconds)} "
+                f"status={frame_status}"
+            )
         progress.update(1)
 
     inference_start = time.perf_counter()
@@ -599,7 +609,7 @@ def run_integrated_pipeline(
     if stats.total_frames == 0:
         raise RuntimeError(f"No frames decoded from: {video}")
 
-    if not smplestx_only:
+    if not smplestx_only and write_fused_params:
         step_start = time.perf_counter()
         for out_name, fused in fused_outputs:
             with open(fused_dir / out_name, "wb") as f:
@@ -609,6 +619,19 @@ def run_integrated_pipeline(
             "write_fused_params",
             step_start,
             {"files": len(fused_outputs), "directory": str(fused_dir)},
+        )
+    elif not smplestx_only:
+        step_timings.append(
+            {
+                "name": "write_fused_params",
+                "seconds": 0.0,
+                "milliseconds": 0.0,
+                "metadata": {
+                    "skipped": True,
+                    "reason": "write_fused_params=False",
+                    "files": len(fused_outputs),
+                },
+            }
         )
 
     if save_raw_smplestx:
@@ -649,6 +672,7 @@ def run_integrated_pipeline(
         "inference_total_sec": inference_total_sec,
         "inference_total_ms": inference_total_sec * 1000,
         "parallel_models": parallel_models,
+        "fused_params_written": bool(write_fused_params),
         "parallel_model_workers": PARALLEL_MODEL_WORKERS if parallel_models else 0,
         "render_total_sec": None,
         "render_total_ms": None,
@@ -904,7 +928,7 @@ def run_integrated_pipeline(
         "name": run_name,
         "frames": stats.total_frames,
         "output": str(output),
-        "fused_params": str(fused_dir),
+        "fused_params": str(fused_dir) if write_fused_params else None,
         "fusion_report": str(report_path),
         "timing_report": str(timing_report_path),
         "rendered_video": str(final_video) if not skip_render else None,
@@ -973,7 +997,10 @@ def run_integrated_pipeline(
     }
     print("\n" + "#" * 72)
     print("  INTEGRATED PIPELINE COMPLETE")
-    print(f"  Fused params   : {fused_dir}")
+    print(
+        "  Fused params   : "
+        + (str(fused_dir) if write_fused_params else "in memory (per-frame PKLs disabled)")
+    )
     print(f"  Fusion report  : {report_path}")
     print(f"  Timing report  : {timing_report_path}")
     print(f"  Inference time : {_format_timing_ms(inference_total_sec)}")
@@ -986,6 +1013,8 @@ def run_integrated_pipeline(
     if not skip_render:
         print(f"  Rendered video : {final_video}")
     print("#" * 72)
+    if return_fused_outputs:
+        summary["_fused_outputs"] = fused_outputs
     return summary
 
 
@@ -1059,6 +1088,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run only SMPLest-X and save <output>/smplestx_params; skip WiLoR, EMOCA, fusion, and render.",
     )
     parser.add_argument(
+        "--no_write_fused_params",
+        dest="write_fused_params",
+        action="store_false",
+        default=True,
+        help="Keep fused parameters in memory instead of writing per-frame PKLs.",
+    )
+    parser.add_argument(
+        "--per_frame_timing_log_interval",
+        type=int,
+        default=1,
+        help="Print one per-frame timing line every N frames; 0 disables these lines.",
+    )
+    parser.add_argument(
         "--stabilize_lower_body",
         action="store_true",
         help="Hold primary person's lower-body SMPL-X body_pose joints from the first valid frame.",
@@ -1119,6 +1161,8 @@ def main() -> None:
         parallel_models=args.parallel_models,
         save_raw_smplestx=args.save_raw_smplestx,
         smplestx_only=args.smplestx_only,
+        write_fused_params=args.write_fused_params,
+        per_frame_timing_log_interval=args.per_frame_timing_log_interval,
     )
 
 

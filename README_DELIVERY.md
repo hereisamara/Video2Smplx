@@ -285,6 +285,11 @@ Sources:
 Runtime results with precomputed YOLO keypoints are stored in
 `delivery/results/runtime_precomputed_yolo_summary.csv`.
 
+The server A/B test for the optimized in-memory execution path is documented in
+`delivery/docs/TIME_OPTIMIZATION_SERVER_TEST.md`. It compares the legacy
+per-frame PKL path, in-memory parallel execution, and in-memory batched
+SMPLest-X execution using identical checkpoints and final NPZ export.
+
 Measured post-processing overhead on S2/S3/S4:
 
 | Stage | Total seconds | ms/frame |

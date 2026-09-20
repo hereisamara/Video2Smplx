@@ -9,6 +9,7 @@ from video2smplx.integrated_pipeline import (
     _predict_frame_parallel,
     _timed_predict,
     _timing_average,
+    build_parser,
 )
 
 
@@ -63,6 +64,22 @@ class IntegratedPipelineHelpersTest(unittest.TestCase):
         self.assertEqual(hands, "hands-frame")
         self.assertEqual(face, "face-frame")
         self.assertEqual(set(timings), {"smplestx", "wilor", "emoca"})
+
+    def test_fast_io_related_cli_flags(self):
+        args = build_parser().parse_args(
+            [
+                "--video",
+                "input.mp4",
+                "--output",
+                "output",
+                "--no_write_fused_params",
+                "--per_frame_timing_log_interval",
+                "0",
+            ]
+        )
+
+        self.assertFalse(args.write_fused_params)
+        self.assertEqual(args.per_frame_timing_log_interval, 0)
 
 
 if __name__ == "__main__":

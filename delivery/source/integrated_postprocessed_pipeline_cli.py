@@ -119,6 +119,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-keypoint-conf", type=float, default=0.15)
     parser.add_argument("--post-batch-size", type=int, default=512)
     parser.add_argument(
+        "--fast-io",
+        action="store_true",
+        help=(
+            "Keep fused and corrected parameters in memory, skip intermediate per-frame "
+            "PKLs, and export only the final NPZ unless --save-final-pkls is set."
+        ),
+    )
+    parser.add_argument(
+        "--save-final-pkls",
+        action="store_true",
+        help="With --fast-io, also write the final smoothed per-frame PKLs for debugging/evaluation.",
+    )
+    parser.add_argument(
+        "--timing-log-interval",
+        type=int,
+        default=1,
+        help="Print a base-model per-frame timing line every N frames; 0 disables these lines.",
+    )
+    parser.add_argument(
         "--warmup-exclude-frames",
         type=int,
         default=2,
@@ -221,6 +240,93 @@ def load_person_rows(params_dir: Path, feature_preset: str) -> tuple[list[dict[s
         )
     rows.sort(key=lambda row: row["frame"])
     return rows, skipped
+
+
+def load_person_rows_memory(
+    frame_ids: list[int],
+    frames: list[list[Any]],
+    feature_preset: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    rows = []
+    skipped = []
+    for index, (frame, frame_data) in enumerate(zip(frame_ids, frames)):
+        person = first_person(frame_data)
+        if person is None:
+            skipped.append({"frame": frame, "reason": "empty_or_multi_person"})
+            continue
+        try:
+            feature = base_feature(person, feature_preset)
+        except Exception as exc:
+            skipped.append({"frame": frame, "reason": f"feature_error: {exc}"})
+            continue
+        rows.append(
+            {
+                "index": index,
+                "frame": frame,
+                "person": person,
+                "base_feature": feature,
+            }
+        )
+    return rows, skipped
+
+
+def apply_global_memory(
+    frame_ids: list[int],
+    frames: list[list[Any]],
+    checkpoint: Path,
+    device: str,
+    batch_size: int,
+) -> tuple[list[list[Any]], dict[str, Any]]:
+    info = load_checkpoint_model(checkpoint, device)
+    rows, skipped = load_person_rows_memory(frame_ids, frames, info["feature_preset"])
+    if not rows:
+        raise ValueError("No usable frames for the global corrector")
+    deltas = predict_mlp(info, temporal_stack(rows, info["temporal_radius"]), batch_size)
+    output = list(frames)
+    for row, delta in zip(rows, deltas):
+        output[row["index"]] = [
+            apply_predicted_correction(
+                row["person"],
+                delta[:3],
+                delta[3:],
+                orient_scale=1.0,
+                transl_scale=1.0,
+                max_delta_degrees=30.0,
+            )
+        ]
+    return output, {
+        "written_frames": len(rows),
+        "skipped": skipped[:20],
+        "checkpoint": str(checkpoint),
+        "storage": "memory",
+    }
+
+
+def apply_hand_memory(
+    frame_ids: list[int],
+    frames: list[list[Any]],
+    checkpoint: Path,
+    device: str,
+    batch_size: int,
+) -> tuple[list[list[Any]], dict[str, Any]]:
+    info = load_checkpoint_model(checkpoint, device)
+    target_mode = str(info["checkpoint"].get("target_mode", "wrist_fingers"))
+    rows, skipped = load_person_rows_memory(frame_ids, frames, info["feature_preset"])
+    if not rows:
+        raise ValueError("No usable frames for the hand corrector")
+    deltas = predict_mlp(info, temporal_stack(rows, info["temporal_radius"]), batch_size)
+    output = list(frames)
+    for row, delta in zip(rows, deltas):
+        output[row["index"]] = [
+            apply_hand_delta(row["person"], delta, target_mode, 90.0, 1.0)
+        ]
+    return output, {
+        "written_frames": len(rows),
+        "skipped": skipped[:20],
+        "checkpoint": str(checkpoint),
+        "target_mode": target_mode,
+        "storage": "memory",
+    }
 
 
 def copy_or_write_all(source_dir: Path, output_dir: Path, corrected: dict[int, dict]) -> None:
@@ -411,6 +517,161 @@ def apply_upper2d_inprocess(
     }
 
 
+def apply_upper2d_memory(
+    frame_ids: list[int],
+    frames: list[list[Any]],
+    checkpoint: Path,
+    yolo: dict[str, dict[int, dict]],
+    sequence: str,
+    model_path: Path,
+    device: str,
+    batch_size: int,
+    scale: float,
+    min_keypoint_conf: float,
+) -> tuple[list[list[Any]], dict[str, Any]]:
+    info = load_checkpoint_model(checkpoint, device)
+    ckpt = info["checkpoint"]
+    feature_ablation = str(ckpt.get("feature_ablation", "full"))
+    base_feature_dim = int(ckpt.get("base_feature_dim", 168))
+    body_indices = normalize_indices(ckpt.get("target_body_indices"))
+    needs_detector = feature_ablation != "smplx_only"
+    smplx = NumpySMPLX(model_path.resolve()) if needs_detector else None
+
+    rows = []
+    skipped = []
+    for start in range(0, len(frames), 64):
+        batch_indices = list(range(start, min(start + 64, len(frames))))
+        persons = []
+        kept_indices = []
+        for index in batch_indices:
+            person = first_person(frames[index])
+            if person is None:
+                skipped.append({"frame": frame_ids[index], "reason": "bad_or_empty_prediction"})
+                continue
+            persons.append(person)
+            kept_indices.append(index)
+        if not kept_indices:
+            continue
+        pred_joints = smplx.forward_joints(persons, predicted=True) if needs_detector else None
+        for person_index, frame_index in enumerate(kept_indices):
+            frame = frame_ids[frame_index]
+            try:
+                if needs_detector:
+                    yolo_frame = get_yolo_frame(yolo, sequence, frame)
+                    if yolo_frame is None:
+                        skipped.append({"frame": frame, "reason": "missing_yolo"})
+                        continue
+                    feature = guided_feature(
+                        persons[person_index],
+                        pred_joints[person_index],
+                        yolo_frame,
+                        info["feature_preset"],
+                        min_keypoint_conf,
+                    )
+                else:
+                    feature = base_feature(persons[person_index], info["feature_preset"])
+            except Exception as exc:
+                skipped.append({"frame": frame, "reason": f"feature_error: {exc}"})
+                continue
+            rows.append(
+                {
+                    "index": frame_index,
+                    "frame": frame,
+                    "person": persons[person_index],
+                    "base_feature": feature,
+                }
+            )
+    rows.sort(key=lambda row: row["frame"])
+    if not rows:
+        raise ValueError("No usable frames for the 2D upper-body corrector")
+    features = temporal_stack(rows, info["temporal_radius"])
+    if needs_detector and feature_ablation != "full":
+        features, _ = transform_features(
+            features,
+            mode=feature_ablation,
+            temporal_radius=info["temporal_radius"],
+            base_feature_dim=base_feature_dim,
+        )
+    deltas = predict_mlp(info, features, batch_size)
+    upper_args = argparse.Namespace(
+        scale=scale,
+        global_scale=1.0,
+        arms_scale=1.0,
+        max_global_delta_degrees=35.0,
+        max_arm_delta_degrees=45.0,
+    )
+    output = list(frames)
+    for row, delta in zip(rows, deltas):
+        output[row["index"]] = [
+            apply_upper_delta(row["person"], delta, body_indices, upper_args)
+        ]
+    return output, {
+        "written_frames": len(rows),
+        "skipped": skipped[:20],
+        "checkpoint": str(checkpoint),
+        "feature_ablation": feature_ablation,
+        "body_indices": body_indices,
+        "storage": "memory",
+    }
+
+
+def render_param_frames(
+    frames: list[list[Any]],
+    frame_ids: list[int],
+    output_dir: Path,
+    smplx_model: Path,
+    input_video: Path,
+    fps: int,
+    smooth_window: int,
+    smooth_poly: int,
+    viewport: int,
+    skip_render: bool,
+    save_render_params: bool,
+    params_source: str,
+) -> dict[str, Any]:
+    if not frames:
+        raise ValueError("No parameter frames to export")
+    render_dir = output_dir / "rendered"
+    render_params_dir = render_dir / "params"
+
+    render_frames = stage_zero_transl(copy.deepcopy(frames))
+    valid_count = sum(first_person(frame) is not None for frame in render_frames)
+    window = min(smooth_window, valid_count)
+    if window % 2 == 0:
+        window -= 1
+    if window > smooth_poly:
+        render_frames = stage_smooth(render_frames, window, smooth_poly)
+    if save_render_params:
+        render_params_dir.mkdir(parents=True, exist_ok=True)
+        for frame_id, frame_data in zip(frame_ids, render_frames):
+            with (render_params_dir / f"{frame_id:06d}_params.pkl").open("wb") as handle:
+                pickle.dump(frame_data, handle)
+
+    npz_path = output_dir / "smplx_params.npz"
+    export_npz(render_frames, frame_ids, npz_path)
+    rendered_video = render_dir / "smplx_render.mp4"
+    side_by_side = output_dir / "side_by_side_input_render.mp4"
+    if not skip_render:
+        render_dir.mkdir(parents=True, exist_ok=True)
+        stage_render(
+            render_frames,
+            smplx_model_path=str(smplx_model),
+            output_video_path=str(rendered_video),
+            video_fps=fps,
+            viewport_size=viewport,
+        )
+        make_side_by_side(input_video, rendered_video, side_by_side, fps)
+    return {
+        "frames": len(frame_ids),
+        "params_source": params_source,
+        "params_dir": None if params_source == "memory" else params_source,
+        "render_params": str(render_params_dir) if save_render_params else None,
+        "smplx_params_npz": str(npz_path),
+        "rendered_video": str(rendered_video) if rendered_video.exists() else None,
+        "side_by_side_video": str(side_by_side) if side_by_side.exists() else None,
+    }
+
+
 def render_param_dir(
     params_dir: Path,
     output_dir: Path,
@@ -427,42 +688,20 @@ def render_param_dir(
         raise FileNotFoundError(f"No *_params.pkl files in {params_dir}")
     frames = [load_frame(path) for path in files]
     frame_ids = [frame_number(path) for path in files]
-    render_dir = output_dir / "rendered"
-    render_params_dir = render_dir / "params"
-    render_params_dir.mkdir(parents=True, exist_ok=True)
-
-    render_frames = stage_zero_transl(copy.deepcopy(frames))
-    valid_count = sum(first_person(frame) is not None for frame in render_frames)
-    window = min(smooth_window, valid_count)
-    if window % 2 == 0:
-        window -= 1
-    if window > smooth_poly:
-        render_frames = stage_smooth(render_frames, window, smooth_poly)
-    for frame_id, frame_data in zip(frame_ids, render_frames):
-        with (render_params_dir / f"{frame_id:06d}_params.pkl").open("wb") as handle:
-            pickle.dump(frame_data, handle)
-
-    npz_path = output_dir / "smplx_params.npz"
-    export_npz(render_frames, frame_ids, npz_path)
-    rendered_video = render_dir / "smplx_render.mp4"
-    side_by_side = output_dir / "side_by_side_input_render.mp4"
-    if not skip_render:
-        stage_render(
-            render_frames,
-            smplx_model_path=str(smplx_model),
-            output_video_path=str(rendered_video),
-            video_fps=fps,
-            viewport_size=viewport,
-        )
-        make_side_by_side(input_video, rendered_video, side_by_side, fps)
-    return {
-        "frames": len(frame_ids),
-        "params_dir": str(params_dir),
-        "render_params": str(render_params_dir),
-        "smplx_params_npz": str(npz_path),
-        "rendered_video": str(rendered_video) if rendered_video.exists() else None,
-        "side_by_side_video": str(side_by_side) if side_by_side.exists() else None,
-    }
+    return render_param_frames(
+        frames,
+        frame_ids,
+        output_dir,
+        smplx_model,
+        input_video,
+        fps,
+        smooth_window,
+        smooth_poly,
+        viewport,
+        skip_render,
+        save_render_params=True,
+        params_source=str(params_dir),
+    )
 
 
 def add_timing(timings: list[dict[str, Any]], stage: str, start: float, frames: int | None = None) -> None:
@@ -548,6 +787,7 @@ def main() -> None:
         "sequence": sequence,
         "postprocess_mode": "none" if args.disable_postprocessing else args.postprocess_mode,
         "postprocessing_enabled": not args.disable_postprocessing and args.postprocess_mode != "none",
+        "storage_mode": "memory" if args.fast_io else "per_frame_pkl",
         "settings": vars(args),
     }
 
@@ -578,40 +818,71 @@ def main() -> None:
         smplestx_inference_mode=args.smplestx_inference_mode,
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,
         parallel_models=args.parallel_models,
+        write_fused_params=not args.fast_io,
+        return_fused_outputs=args.fast_io,
+        per_frame_timing_log_interval=args.timing_log_interval,
     )
+    fused_outputs = base_summary.pop("_fused_outputs", None)
     frames = int(base_summary["frames"])
     add_timing(timings, "base_integrated_inference_fusion_no_render", start, frames)
     report["base_summary"] = base_summary
 
     base_params = output / "fused_params"
     final_params = base_params
+    frame_ids: list[int] | None = None
+    working_frames: list[list[Any]] | None = None
+    if args.fast_io:
+        if fused_outputs is None:
+            raise RuntimeError("Fast I/O requested but the base pipeline returned no in-memory outputs")
+        frame_ids = [frame_number(Path(out_name)) for out_name, _ in fused_outputs]
+        working_frames = [frame_data for _, frame_data in fused_outputs]
     post_report = {}
     post_mode = "none" if args.disable_postprocessing else args.postprocess_mode
     if post_mode != "none":
         start = time.perf_counter()
-        global_dir = output / "fused_params_model_global_corrected"
-        post_report["global"] = apply_global_inprocess(
-            base_params,
-            global_dir,
-            Path(args.global_ckpt),
-            args.device,
-            args.post_batch_size,
-        )
-        add_timing(timings, "post_global_orient_transl", start, frames)
-        final_params = global_dir
-
-        if post_mode in ("global_hand", "fast", "accurate"):
-            start = time.perf_counter()
-            hand_dir = output / "fused_params_model_global_hand_corrected"
-            post_report["hand"] = apply_hand_inprocess(
-                global_dir,
-                hand_dir,
-                Path(args.hand_ckpt),
+        if args.fast_io:
+            assert frame_ids is not None and working_frames is not None
+            working_frames, post_report["global"] = apply_global_memory(
+                frame_ids,
+                working_frames,
+                Path(args.global_ckpt),
                 args.device,
                 args.post_batch_size,
             )
+        else:
+            global_dir = output / "fused_params_model_global_corrected"
+            post_report["global"] = apply_global_inprocess(
+                base_params,
+                global_dir,
+                Path(args.global_ckpt),
+                args.device,
+                args.post_batch_size,
+            )
+            final_params = global_dir
+        add_timing(timings, "post_global_orient_transl", start, frames)
+
+        if post_mode in ("global_hand", "fast", "accurate"):
+            start = time.perf_counter()
+            if args.fast_io:
+                assert frame_ids is not None and working_frames is not None
+                working_frames, post_report["hand"] = apply_hand_memory(
+                    frame_ids,
+                    working_frames,
+                    Path(args.hand_ckpt),
+                    args.device,
+                    args.post_batch_size,
+                )
+            else:
+                hand_dir = output / "fused_params_model_global_hand_corrected"
+                post_report["hand"] = apply_hand_inprocess(
+                    global_dir,
+                    hand_dir,
+                    Path(args.hand_ckpt),
+                    args.device,
+                    args.post_batch_size,
+                )
+                final_params = hand_dir
             add_timing(timings, "post_hand_wrist_fingers", start, frames)
-            final_params = hand_dir
 
         if post_mode == "accurate":
             start = time.perf_counter()
@@ -635,21 +906,36 @@ def main() -> None:
                 add_timing(timings, "post_yolo_pose_2d", start, frames)
 
             start = time.perf_counter()
-            upper_dir = output / "fused_params_2d_upper_corrected_s0p75"
-            post_report["upper2d"] = apply_upper2d_inprocess(
-                final_params,
-                upper_dir,
-                Path(args.upper2d_ckpt),
-                yolo,
-                sequence,
-                Path(args.eval_model),
-                args.device,
-                args.post_batch_size,
-                args.upper_scale,
-                args.min_keypoint_conf,
-            )
+            if args.fast_io:
+                assert frame_ids is not None and working_frames is not None
+                working_frames, post_report["upper2d"] = apply_upper2d_memory(
+                    frame_ids,
+                    working_frames,
+                    Path(args.upper2d_ckpt),
+                    yolo,
+                    sequence,
+                    Path(args.eval_model),
+                    args.device,
+                    args.post_batch_size,
+                    args.upper_scale,
+                    args.min_keypoint_conf,
+                )
+            else:
+                upper_dir = output / "fused_params_2d_upper_corrected_s0p75"
+                post_report["upper2d"] = apply_upper2d_inprocess(
+                    final_params,
+                    upper_dir,
+                    Path(args.upper2d_ckpt),
+                    yolo,
+                    sequence,
+                    Path(args.eval_model),
+                    args.device,
+                    args.post_batch_size,
+                    args.upper_scale,
+                    args.min_keypoint_conf,
+                )
+                final_params = upper_dir
             add_timing(timings, "post_2d_guided_upper_body", start, frames)
-            final_params = upper_dir
 
     report["postprocessing"] = post_report
 
@@ -662,17 +948,34 @@ def main() -> None:
         final_output = output / "final_global_hand"
     else:
         final_output = output / f"final_{post_mode}"
-    render_report = render_param_dir(
-        final_params,
-        final_output,
-        Path(args.smplx_model),
-        video,
-        args.fps,
-        args.smooth_window,
-        args.smooth_poly,
-        args.viewport,
-        args.skip_render,
-    )
+    if args.fast_io:
+        assert frame_ids is not None and working_frames is not None
+        render_report = render_param_frames(
+            working_frames,
+            frame_ids,
+            final_output,
+            Path(args.smplx_model),
+            video,
+            args.fps,
+            args.smooth_window,
+            args.smooth_poly,
+            args.viewport,
+            args.skip_render,
+            save_render_params=args.save_final_pkls,
+            params_source="memory",
+        )
+    else:
+        render_report = render_param_dir(
+            final_params,
+            final_output,
+            Path(args.smplx_model),
+            video,
+            args.fps,
+            args.smooth_window,
+            args.smooth_poly,
+            args.viewport,
+            args.skip_render,
+        )
     add_timing(timings, "final_npz_smooth_render", start, frames)
     report["final_outputs"] = render_report
 
