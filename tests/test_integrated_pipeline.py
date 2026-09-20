@@ -75,11 +75,17 @@ class IntegratedPipelineHelpersTest(unittest.TestCase):
                 "--no_write_fused_params",
                 "--per_frame_timing_log_interval",
                 "0",
+                "--wilor_detector_stride",
+                "3",
+                "--emoca_detector_stride",
+                "5",
             ]
         )
 
         self.assertFalse(args.write_fused_params)
         self.assertEqual(args.per_frame_timing_log_interval, 0)
+        self.assertEqual(args.wilor_detector_stride, 3)
+        self.assertEqual(args.emoca_detector_stride, 5)
 
 
 if __name__ == "__main__":

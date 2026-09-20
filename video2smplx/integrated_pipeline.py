@@ -193,6 +193,8 @@ def run_integrated_pipeline(
     stabilize_torso: bool = False,
     stabilize_shape: bool = False,
     smplestx_detector_stride: int = 1,
+    wilor_detector_stride: int = 1,
+    emoca_detector_stride: int = 1,
     smplestx_batch_size: int = 1,
     smplestx_inference_mode: bool = False,
     smplestx_single_gpu_model: bool = False,
@@ -306,6 +308,9 @@ def run_integrated_pipeline(
     print(f"  torso      : {'first-frame stabilized' if stabilize_torso else 'dynamic'}")
     print(f"  shape      : {'first-frame stabilized' if stabilize_shape else 'dynamic'}")
     print(f"  sx det str : {max(1, smplestx_detector_stride)}")
+    if not smplestx_only:
+        print(f"  hand det str: {max(1, wilor_detector_stride)}")
+        print(f"  face det str: {max(1, emoca_detector_stride)}")
     print(f"  sx batch   : {max(1, smplestx_batch_size)}")
     print(f"  sx infer   : {'inference_mode' if smplestx_inference_mode else 'no_grad'}")
     print(f"  sx model   : {'single GPU module' if smplestx_single_gpu_model else 'DataParallel wrapper'}")
@@ -341,11 +346,20 @@ def run_integrated_pipeline(
     if not smplestx_only:
         print("\n[load] WiLoR")
         step_start = time.perf_counter()
-        wilor = WiLoRRunner(wilor_dir, device=device)
+        wilor = WiLoRRunner(
+            wilor_dir,
+            device=device,
+            detector_stride=wilor_detector_stride,
+        )
         _add_step_timing(step_timings, "load_wilor", step_start)
         print("\n[load] EMOCA")
         step_start = time.perf_counter()
-        emoca = EMOCARunner(emoca_dir, model_name=emoca_model, device=device)
+        emoca = EMOCARunner(
+            emoca_dir,
+            model_name=emoca_model,
+            device=device,
+            detector_stride=emoca_detector_stride,
+        )
         _add_step_timing(step_timings, "load_emoca", step_start)
 
     stats = FusionStats()
@@ -602,6 +616,8 @@ def run_integrated_pipeline(
                 "frames": stats.total_frames,
                 "smplestx_batch_size": smplestx_batch_size,
                 "parallel_models": parallel_models,
+                "wilor_detector_stride": max(1, wilor_detector_stride),
+                "emoca_detector_stride": max(1, emoca_detector_stride),
             },
         }
     )
@@ -941,6 +957,10 @@ def run_integrated_pipeline(
             "inference_mode": smplestx_inference_mode,
             "single_gpu_model": smplestx_single_gpu_model,
         },
+        "auxiliary_detector_optimization": {
+            "wilor_detector_stride": max(1, wilor_detector_stride),
+            "emoca_detector_stride": max(1, emoca_detector_stride),
+        },
         "parallel_models": parallel_models,
         "lower_body_stabilization": {
             "enabled": stabilize_lower_body,
@@ -1060,6 +1080,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--wilor_detector_stride",
+        type=int,
+        default=1,
+        help="Run WiLoR hand detection every N frames and reuse boxes between detections.",
+    )
+    parser.add_argument(
+        "--emoca_detector_stride",
+        type=int,
+        default=1,
+        help="Run EMOCA face detection every N frames and reuse the crop between detections.",
+    )
+    parser.add_argument(
         "--smplestx_inference_mode",
         action="store_true",
         help="Use torch.inference_mode() for SMPLest-X forward instead of torch.no_grad().",
@@ -1155,6 +1187,8 @@ def main() -> None:
         stabilize_torso=args.stabilize_torso,
         stabilize_shape=args.stabilize_shape,
         smplestx_detector_stride=args.smplestx_detector_stride,
+        wilor_detector_stride=args.wilor_detector_stride,
+        emoca_detector_stride=args.emoca_detector_stride,
         smplestx_batch_size=args.smplestx_batch_size,
         smplestx_inference_mode=args.smplestx_inference_mode,
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,

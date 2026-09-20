@@ -21,11 +21,15 @@ class WiLoRRunner:
         device: str = "cuda",
         rescale_factor: float = 2.0,
         batch_size: int = 16,
+        detector_stride: int = 1,
     ):
         self.project_dir = Path(project_dir).resolve()
         self.device_name = device
         self.rescale_factor = rescale_factor
         self.batch_size = batch_size
+        self.detector_stride = max(1, int(detector_stride))
+        self._cached_boxes: np.ndarray | None = None
+        self._cached_handedness: np.ndarray | None = None
         require_files(
             [
                 self.project_dir / "pretrained_models" / "wilor_final.ckpt",
@@ -72,6 +76,34 @@ class WiLoRRunner:
             "left_hand_global_orient": None,
         }
 
+    def _should_run_detector(self, frame: FrameInput) -> bool:
+        if self.detector_stride <= 1:
+            return True
+        if self._cached_boxes is None or self._cached_handedness is None:
+            return True
+        return (frame.frame_id - 1) % self.detector_stride == 0
+
+    def _hand_boxes(self, frame: FrameInput, image_bgr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        if not self._should_run_detector(frame):
+            return self._cached_boxes.copy(), self._cached_handedness.copy()
+
+        detections = self.detector(image_bgr, conf=0.3, verbose=False)[0]
+        boxes_obj = detections.boxes
+        if boxes_obj is None or len(boxes_obj) == 0:
+            self._cached_boxes = None
+            self._cached_handedness = None
+            return np.empty((0, 4), dtype=np.float32), np.empty((0,), dtype=np.float32)
+
+        boxes = boxes_obj.xyxy.detach().cpu().numpy().astype(np.float32)
+        handedness = boxes_obj.cls.detach().cpu().numpy().astype(np.float32)
+        if len(boxes) == 0:
+            self._cached_boxes = None
+            self._cached_handedness = None
+            return boxes, handedness
+        self._cached_boxes = boxes.copy()
+        self._cached_handedness = handedness.copy()
+        return boxes, handedness
+
     def predict(self, frame: FrameInput) -> dict[str, Any]:
         if frame.image_bgr is not None:
             img_cv2 = frame.image_bgr.copy()
@@ -83,13 +115,7 @@ class WiLoRRunner:
         if img_cv2 is None:
             raise FileNotFoundError(f"Could not read frame: {frame.path}")
 
-        detections = self.detector(img_cv2, conf=0.3, verbose=False)[0]
-        boxes_obj = detections.boxes
-        if boxes_obj is None or len(boxes_obj) == 0:
-            return self.empty_result()
-
-        boxes = boxes_obj.xyxy.detach().cpu().numpy()
-        right = boxes_obj.cls.detach().cpu().numpy()
+        boxes, right = self._hand_boxes(frame, img_cv2)
         if len(boxes) == 0:
             return self.empty_result()
 
@@ -110,7 +136,7 @@ class WiLoRRunner:
         frame_params = self.empty_result()
         for batch in dataloader:
             batch = self.recursive_to(batch, self.device)
-            with self.torch.no_grad():
+            with self.torch.inference_mode():
                 out = self.model(batch)
 
             batch_size = batch["img"].shape[0]

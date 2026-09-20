@@ -72,3 +72,28 @@ For a debugging run that also saves final smoothed PKLs, add `--save-final-pkls`
 - `fastio_batched` versus `fastio_parallel` measures whether SMPLest-X batch size 8 is more valuable than concurrent same-frame execution on the server GPU.
 - A difference smaller than about 3% should be treated as run-to-run noise. Use two or more repeats before selecting a production mode.
 - This test uses precomputed YOLO keypoints. YOLO extraction time must be reported separately for fully online processing of an unseen video.
+
+## 10 FPS Detector-Stride Test
+
+The foundation models remain the limiting stage after fast I/O. The next test
+reuses slowly changing WiLoR hand-detection boxes and EMOCA face crops while
+still estimating MANO hand parameters and EMOCA face parameters on every frame.
+
+```bash
+SEQUENCES="SignLanguage_S2" \
+REPEATS=1 \
+RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_10fps_detector_stride \
+YOLO_KEYPOINTS=/project/lt200246-mmacma/khtun/video2smplx_integrated_oneprocess_benchmark_prekeypoints/evaluation/precomputed_yolo_pose_keypoints.json \
+sbatch delivery/scripts/slurm_benchmark_10fps_detector_stride.sh
+```
+
+The variants are `baseline`, `face5`, `hand3_face5`, and `hand5_face5`. The
+result is written to:
+
+```text
+<RUN_ROOT>/evaluation/target_10fps_summary.csv
+```
+
+Use `warm_pipeline_fps` as the target metric. It combines warmup-excluded model
+time with measured correction, smoothing, and NPZ export time. A configuration
+must also pass geometry evaluation before it replaces the baseline.

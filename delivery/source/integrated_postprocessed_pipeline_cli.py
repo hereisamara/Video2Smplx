@@ -81,6 +81,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-model", default="signlanguage_global_correction_server/models/SMPLX_FEMALE.npz")
     parser.add_argument("--multi-person", action="store_true")
     parser.add_argument("--smplestx-detector-stride", type=int, default=5)
+    parser.add_argument(
+        "--wilor-detector-stride",
+        type=int,
+        default=1,
+        help="Run WiLoR hand detection every N frames and reuse boxes between detections.",
+    )
+    parser.add_argument(
+        "--emoca-detector-stride",
+        type=int,
+        default=1,
+        help="Run EMOCA face detection every N frames and reuse the crop between detections.",
+    )
     parser.add_argument("--smplestx-batch-size", type=int, default=8)
     parser.add_argument("--smplestx-inference-mode", action="store_true", default=True)
     parser.add_argument("--no-smplestx-inference-mode", dest="smplestx_inference_mode", action="store_false")
@@ -738,6 +750,21 @@ def steady_state_model_summary(base_summary: dict[str, Any], warmup_exclude: int
     steady = usable[warmup:] if warmup < len(usable) else []
     seconds = sum(float(row["total_sec"]) for row in steady)
     frames = len(steady)
+    model_breakdown = {}
+    for model_name in ("smplestx", "wilor", "emoca"):
+        values = [
+            float(row["timings_sec"][model_name])
+            for row in steady
+            if (row.get("timings_sec") or {}).get(model_name) is not None
+        ]
+        model_seconds = sum(values)
+        model_frames = len(values)
+        model_breakdown[model_name] = {
+            "frames": model_frames,
+            "seconds": model_seconds,
+            "seconds_per_frame": model_seconds / model_frames if model_frames else None,
+            "fps": model_frames / model_seconds if model_seconds > 0 else None,
+        }
     return {
         "warmup_excluded_frames": min(warmup, len(usable)),
         "steady_state_frames": frames,
@@ -746,6 +773,7 @@ def steady_state_model_summary(base_summary: dict[str, Any], warmup_exclude: int
         "steady_state_model_fps": frames / seconds if seconds > 0 else None,
         "first_frame_model_seconds": float(usable[0]["total_sec"]) if usable else None,
         "second_frame_model_seconds": float(usable[1]["total_sec"]) if len(usable) > 1 else None,
+        "per_model": model_breakdown,
     }
 
 
@@ -814,6 +842,8 @@ def main() -> None:
         stabilize_torso=args.stabilize_torso,
         stabilize_shape=args.stabilize_shape,
         smplestx_detector_stride=args.smplestx_detector_stride,
+        wilor_detector_stride=args.wilor_detector_stride,
+        emoca_detector_stride=args.emoca_detector_stride,
         smplestx_batch_size=args.smplestx_batch_size,
         smplestx_inference_mode=args.smplestx_inference_mode,
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,
@@ -989,6 +1019,18 @@ def main() -> None:
     initial_load_seconds = float(load_summary["initial_load_seconds"])
     no_load_total = max(0.0, total_seconds - initial_load_seconds)
     no_load_inference = max(0.0, inference_no_render - initial_load_seconds)
+    steady_summary = steady_state_model_summary(base_summary, args.warmup_exclude_frames)
+    downstream_seconds_per_frame = sum(
+        float(row["seconds"])
+        for row in timings
+        if row["stage"] != "base_integrated_inference_fusion_no_render"
+    ) / frames
+    steady_model_seconds_per_frame = steady_summary.get("steady_state_model_seconds_per_frame")
+    warm_pipeline_seconds_per_frame = (
+        steady_model_seconds_per_frame + downstream_seconds_per_frame
+        if steady_model_seconds_per_frame is not None
+        else None
+    )
     report["summary"] = {
         "frames": frames,
         "total_seconds": total_seconds,
@@ -1004,7 +1046,20 @@ def main() -> None:
         "no_initial_load_no_render_seconds": no_load_inference,
         "no_initial_load_no_render_seconds_per_frame": no_load_inference / frames,
         "no_initial_load_no_render_fps": frames / no_load_inference if no_load_inference > 0 else None,
-        "steady_state": steady_state_model_summary(base_summary, args.warmup_exclude_frames),
+        "steady_state": steady_summary,
+        "warm_steady_pipeline_estimate": {
+            "definition": (
+                "warmup-excluded foundation-model seconds per frame plus measured "
+                "postprocess and final-output seconds per frame"
+            ),
+            "downstream_seconds_per_frame": downstream_seconds_per_frame,
+            "seconds_per_frame": warm_pipeline_seconds_per_frame,
+            "fps": (
+                1.0 / warm_pipeline_seconds_per_frame
+                if warm_pipeline_seconds_per_frame and warm_pipeline_seconds_per_frame > 0
+                else None
+            ),
+        },
     }
     report_path = output / "runtime" / "integrated_postprocessed_runtime_report.json"
     write_report(report_path, report, timings)

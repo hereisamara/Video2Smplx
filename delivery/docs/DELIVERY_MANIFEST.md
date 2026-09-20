@@ -32,6 +32,7 @@ and sample results needed to run and verify the sign-language SMPL-X pipeline.
 | Fair FPS with/without post-processing benchmark | `delivery/scripts/slurm_benchmark_delivery_fair_fps.sh` |
 | One-process integrated postprocessed benchmark | `delivery/scripts/slurm_benchmark_integrated_postprocessed_oneprocess.sh` |
 | In-memory time-optimization A/B benchmark | `delivery/scripts/slurm_benchmark_time_optimized_pipeline.sh` |
+| 10 FPS detector-stride benchmark | `delivery/scripts/slurm_benchmark_10fps_detector_stride.sh` |
 | Time-optimization server guide | `delivery/docs/TIME_OPTIMIZATION_SERVER_TEST.md` |
 | Ablation sample output generator | `delivery/scripts/slurm_generate_ablation_samples.sh` |
 | Included ablation video comparison media | `docs/media/ablation_s2/` |

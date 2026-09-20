@@ -24,11 +24,14 @@ class EMOCARunner:
         crop_size: int = 224,
         scale: float = 1.25,
         face_detector_threshold: float = 0.5,
+        detector_stride: int = 1,
     ):
         self.project_dir = Path(project_dir).resolve()
         self.model_name = model_name
         self.crop_size = crop_size
         self.scale = scale
+        self.detector_stride = max(1, int(detector_stride))
+        self._cached_face_bbox: tuple[float, float, float, float, Any] | None = None
         self.device = torch.device(device if device == "cuda" and torch.cuda.is_available() else "cpu")
         path_to_models = self.project_dir / "assets" / "EMOCA" / "models"
         checkpoint_dir = path_to_models / model_name / "detail" / "checkpoints"
@@ -90,14 +93,40 @@ class EMOCARunner:
             "tex": None,
         }
 
-    def _crop_face(self, image_rgb: np.ndarray) -> torch.Tensor:
+    def _should_run_detector(self, frame_id: int) -> bool:
+        if self.detector_stride <= 1:
+            return True
+        if self._cached_face_bbox is None:
+            return True
+        return (frame_id - 1) % self.detector_stride == 0
+
+    def _face_bbox(
+        self,
+        image_rgb: np.ndarray,
+        frame_id: int,
+    ) -> tuple[float, float, float, float, Any]:
         h, w, _ = image_rgb.shape
+        if not self._should_run_detector(frame_id):
+            assert self._cached_face_bbox is not None
+            return self._cached_face_bbox
+
         bboxes, bbox_type = self.face_detector.run(image_rgb)
         if len(bboxes) < 1:
-            left, right, top, bottom = 0, w - 1, 0, h - 1
+            result = (0.0, 0.0, float(w - 1), float(h - 1), bbox_type)
         else:
             bbox = bboxes[0]
-            left, top, right, bottom = bbox[0], bbox[1], bbox[2], bbox[3]
+            result = (
+                float(bbox[0]),
+                float(bbox[1]),
+                float(bbox[2]),
+                float(bbox[3]),
+                bbox_type,
+            )
+        self._cached_face_bbox = result
+        return result
+
+    def _crop_face(self, image_rgb: np.ndarray, frame_id: int) -> torch.Tensor:
+        left, top, right, bottom, bbox_type = self._face_bbox(image_rgb, frame_id)
 
         old_size, center = self.bbox2point(left, right, top, bottom, type=bbox_type)
         size = int(old_size * self.scale)
@@ -145,10 +174,10 @@ class EMOCARunner:
         if image_bgr is None:
             raise FileNotFoundError(f"Could not read frame: {frame.path}")
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-        cropped = self._crop_face(image_rgb)
+        cropped = self._crop_face(image_rgb, frame.frame_id)
         batch = {"image": cropped.unsqueeze(0).to(self.device)}
 
-        with torch.no_grad():
+        with torch.inference_mode():
             vals = self.emoca.encode(batch, training=False)
 
         result = self.empty_result()
