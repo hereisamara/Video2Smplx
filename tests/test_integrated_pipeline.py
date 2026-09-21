@@ -7,6 +7,7 @@ from video2smplx.integrated_pipeline import (
     _iter_batches,
     _is_valid_fused_frame,
     _predict_frame_parallel,
+    _resolve_model_execution_mode,
     _timed_predict,
     _timing_average,
     build_parser,
@@ -42,6 +43,24 @@ class IntegratedPipelineHelpersTest(unittest.TestCase):
         self.assertEqual(result["result"], "ok-frame")
         self.assertIsNone(result["exception"])
         self.assertGreaterEqual(result["seconds"], 0.0)
+
+    def test_execution_mode_resolution_preserves_legacy_flags(self):
+        self.assertEqual(
+            _resolve_model_execution_mode(None, parallel_models=True, smplestx_only=False),
+            "frame_parallel",
+        )
+        self.assertEqual(
+            _resolve_model_execution_mode(None, parallel_models=False, smplestx_only=False),
+            "sequential_batched",
+        )
+        self.assertEqual(
+            _resolve_model_execution_mode("streaming", parallel_models=False, smplestx_only=False),
+            "streaming",
+        )
+        self.assertEqual(
+            _resolve_model_execution_mode("streaming", parallel_models=True, smplestx_only=True),
+            "sequential_batched",
+        )
 
     def test_predict_frame_parallel_collects_all_model_outputs(self):
         class Runner:
@@ -79,6 +98,10 @@ class IntegratedPipelineHelpersTest(unittest.TestCase):
                 "3",
                 "--emoca_detector_stride",
                 "5",
+                "--model_execution_mode",
+                "streaming",
+                "--max_inflight_frames",
+                "3",
             ]
         )
 
@@ -86,6 +109,8 @@ class IntegratedPipelineHelpersTest(unittest.TestCase):
         self.assertEqual(args.per_frame_timing_log_interval, 0)
         self.assertEqual(args.wilor_detector_stride, 3)
         self.assertEqual(args.emoca_detector_stride, 5)
+        self.assertEqual(args.model_execution_mode, "streaming")
+        self.assertEqual(args.max_inflight_frames, 3)
 
 
 if __name__ == "__main__":

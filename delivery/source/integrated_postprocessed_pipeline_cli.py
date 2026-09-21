@@ -54,6 +54,7 @@ from transform_signlanguage_feature_ablation_dataset import transform_features  
 from video2smplx.integrated_pipeline import (  # noqa: E402
     DEFAULT_SMPLX_MODEL,
     EMOCA_DIR,
+    MODEL_EXECUTION_MODES,
     SMPLESTX_DIR,
     WILOR_DIR,
     run_integrated_pipeline,
@@ -94,12 +95,29 @@ def parse_args() -> argparse.Namespace:
         help="Run EMOCA face detection every N frames and reuse the crop between detections.",
     )
     parser.add_argument("--smplestx-batch-size", type=int, default=8)
+    parser.add_argument("--wilor-batch-size", type=int, default=16)
+    parser.add_argument("--emoca-batch-size", type=int, default=16)
     parser.add_argument("--smplestx-inference-mode", action="store_true", default=True)
     parser.add_argument("--no-smplestx-inference-mode", dest="smplestx_inference_mode", action="store_false")
     parser.add_argument("--smplestx-single-gpu-model", action="store_true", default=True)
     parser.add_argument("--no-smplestx-single-gpu-model", dest="smplestx_single_gpu_model", action="store_false")
     parser.add_argument("--parallel-models", action="store_true", default=True)
     parser.add_argument("--no-parallel-models", dest="parallel_models", action="store_false")
+    parser.add_argument(
+        "--model-execution-mode",
+        choices=MODEL_EXECUTION_MODES,
+        default=None,
+        help=(
+            "Model schedule: frame_parallel, bounded streaming, offline "
+            "batch_then_combine, or legacy sequential_batched."
+        ),
+    )
+    parser.add_argument(
+        "--max-inflight-frames",
+        type=int,
+        default=4,
+        help="Maximum queued frames in streaming execution mode.",
+    )
     parser.add_argument("--stabilize-global-orient", action="store_true")
     parser.add_argument("--stabilize-shape", action="store_true")
     parser.add_argument("--stabilize-lower-body", action="store_true")
@@ -740,6 +758,7 @@ def write_report(path: Path, report: dict[str, Any], timings: list[dict[str, Any
 
 def steady_state_model_summary(base_summary: dict[str, Any], warmup_exclude: int) -> dict[str, Any]:
     timing_report = base_summary.get("timings") or {}
+    execution_mode = timing_report.get("model_execution_mode", "frame_parallel")
     per_frame = timing_report.get("per_frame") or []
     usable = [
         row
@@ -748,8 +767,28 @@ def steady_state_model_summary(base_summary: dict[str, Any], warmup_exclude: int
     ]
     warmup = max(0, int(warmup_exclude))
     steady = usable[warmup:] if warmup < len(usable) else []
-    seconds = sum(float(row["total_sec"]) for row in steady)
     frames = len(steady)
+    if execution_mode == "batch_then_combine":
+        steady = usable
+        frames = len(steady)
+        warmup = 0
+        seconds = float(timing_report.get("inference_total_sec") or 0.0)
+        seconds_definition = (
+            "measured full batch inference and fusion wall time; "
+            "per-frame warmup cannot be separated"
+        )
+    elif execution_mode == "streaming" and steady:
+        end_elapsed = float(steady[-1]["completion_elapsed_sec"])
+        start_elapsed = (
+            float(usable[warmup - 1]["completion_elapsed_sec"])
+            if warmup > 0
+            else 0.0
+        )
+        seconds = max(0.0, end_elapsed - start_elapsed)
+        seconds_definition = "wall-clock completion throughput after warmup"
+    else:
+        seconds = sum(float(row["total_sec"]) for row in steady)
+        seconds_definition = "sum of effective per-frame model and fusion time"
     model_breakdown = {}
     for model_name in ("smplestx", "wilor", "emoca"):
         values = [
@@ -766,6 +805,8 @@ def steady_state_model_summary(base_summary: dict[str, Any], warmup_exclude: int
             "fps": model_frames / model_seconds if model_seconds > 0 else None,
         }
     return {
+        "model_execution_mode": execution_mode,
+        "seconds_definition": seconds_definition,
         "warmup_excluded_frames": min(warmup, len(usable)),
         "steady_state_frames": frames,
         "steady_state_model_seconds": seconds,
@@ -845,9 +886,13 @@ def main() -> None:
         wilor_detector_stride=args.wilor_detector_stride,
         emoca_detector_stride=args.emoca_detector_stride,
         smplestx_batch_size=args.smplestx_batch_size,
+        wilor_batch_size=args.wilor_batch_size,
+        emoca_batch_size=args.emoca_batch_size,
         smplestx_inference_mode=args.smplestx_inference_mode,
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,
         parallel_models=args.parallel_models,
+        model_execution_mode=args.model_execution_mode,
+        max_inflight_frames=args.max_inflight_frames,
         write_fused_params=not args.fast_io,
         return_fused_outputs=args.fast_io,
         per_frame_timing_log_interval=args.timing_log_interval,
@@ -1020,6 +1065,8 @@ def main() -> None:
     no_load_total = max(0.0, total_seconds - initial_load_seconds)
     no_load_inference = max(0.0, inference_no_render - initial_load_seconds)
     steady_summary = steady_state_model_summary(base_summary, args.warmup_exclude_frames)
+    base_timing_report = base_summary.get("timings") or {}
+    fusion_total_seconds = float(base_timing_report.get("fusion_total_sec") or 0.0)
     downstream_seconds_per_frame = sum(
         float(row["seconds"])
         for row in timings
@@ -1046,10 +1093,17 @@ def main() -> None:
         "no_initial_load_no_render_seconds": no_load_inference,
         "no_initial_load_no_render_seconds_per_frame": no_load_inference / frames,
         "no_initial_load_no_render_fps": frames / no_load_inference if no_load_inference > 0 else None,
+        "model_execution_mode": base_timing_report.get("model_execution_mode"),
+        "max_inflight_frames": base_timing_report.get("max_inflight_frames"),
+        "fusion_combine_seconds": fusion_total_seconds,
+        "fusion_combine_seconds_per_frame": fusion_total_seconds / frames,
+        "fusion_combine_fps": (
+            frames / fusion_total_seconds if fusion_total_seconds > 0 else None
+        ),
         "steady_state": steady_summary,
         "warm_steady_pipeline_estimate": {
             "definition": (
-                "warmup-excluded foundation-model seconds per frame plus measured "
+                f"{steady_summary.get('seconds_definition')}; plus measured "
                 "postprocess and final-output seconds per frame"
             ),
             "downstream_seconds_per_frame": downstream_seconds_per_frame,

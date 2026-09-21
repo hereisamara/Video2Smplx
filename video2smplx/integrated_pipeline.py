@@ -7,6 +7,7 @@ then performs body/hand/face inference and fusion per frame in memory.
 from __future__ import annotations
 
 import argparse
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 import copy
 import json
@@ -37,6 +38,12 @@ DEFAULT_SMPLX_MODEL = (
 )
 MODEL_TIMING_KEYS = ("smplestx", "wilor", "emoca")
 PARALLEL_MODEL_WORKERS = len(MODEL_TIMING_KEYS)
+MODEL_EXECUTION_MODES = (
+    "frame_parallel",
+    "streaming",
+    "batch_then_combine",
+    "sequential_batched",
+)
 
 
 def _clear_frame_dir(frame_dir: Path) -> None:
@@ -109,6 +116,21 @@ def _iter_batches(iterable, batch_size: int):
         yield batch
 
 
+def _resolve_model_execution_mode(
+    requested_mode: str | None,
+    parallel_models: bool,
+    smplestx_only: bool,
+) -> str:
+    if smplestx_only:
+        return "sequential_batched"
+    if requested_mode is None:
+        return "frame_parallel" if parallel_models else "sequential_batched"
+    if requested_mode not in MODEL_EXECUTION_MODES:
+        choices = ", ".join(MODEL_EXECUTION_MODES)
+        raise ValueError(f"Unknown model execution mode '{requested_mode}'; choose from: {choices}")
+    return requested_mode
+
+
 def _timed_predict(predict_fn, frame) -> dict:
     start_time = time.perf_counter()
     try:
@@ -131,6 +153,10 @@ def _predict_frame_parallel(executor, smplestx, wilor, emoca, frame):
         "wilor": executor.submit(_timed_predict, wilor.predict, frame),
         "emoca": executor.submit(_timed_predict, emoca.predict, frame),
     }
+    return _collect_prediction_futures(futures)
+
+
+def _collect_prediction_futures(futures):
     results = {}
     timings = {}
     errors = []
@@ -196,9 +222,13 @@ def run_integrated_pipeline(
     wilor_detector_stride: int = 1,
     emoca_detector_stride: int = 1,
     smplestx_batch_size: int = 1,
+    wilor_batch_size: int = 16,
+    emoca_batch_size: int = 16,
     smplestx_inference_mode: bool = False,
     smplestx_single_gpu_model: bool = False,
     parallel_models: bool = False,
+    model_execution_mode: str | None = None,
+    max_inflight_frames: int = 4,
     save_raw_smplestx: bool = False,
     smplestx_only: bool = False,
     write_fused_params: bool = True,
@@ -207,9 +237,15 @@ def run_integrated_pipeline(
 ) -> dict:
     from tqdm import tqdm
 
+    model_execution_mode = _resolve_model_execution_mode(
+        model_execution_mode,
+        parallel_models,
+        smplestx_only,
+    )
+    max_inflight_frames = max(1, int(max_inflight_frames))
+    parallel_models = model_execution_mode in {"frame_parallel", "streaming"}
     if smplestx_only:
         save_raw_smplestx = True
-        parallel_models = False
         skip_render = True
 
     pipeline_start = time.perf_counter()
@@ -312,13 +348,17 @@ def run_integrated_pipeline(
         print(f"  hand det str: {max(1, wilor_detector_stride)}")
         print(f"  face det str: {max(1, emoca_detector_stride)}")
     print(f"  sx batch   : {max(1, smplestx_batch_size)}")
+    print(f"  hand batch : {max(1, wilor_batch_size)}")
+    print(f"  face batch : {max(1, emoca_batch_size)}")
     print(f"  sx infer   : {'inference_mode' if smplestx_inference_mode else 'no_grad'}")
     print(f"  sx model   : {'single GPU module' if smplestx_single_gpu_model else 'DataParallel wrapper'}")
-    print(f"  model exec : {'parallel per frame' if parallel_models else 'sequential/batched'}")
+    print(f"  model exec : {model_execution_mode}")
+    if model_execution_mode == "streaming":
+        print(f"  in flight  : {max_inflight_frames} frames")
     if smplestx_only:
         print("  note       : WiLoR/EMOCA/fusion/render are skipped")
-    if parallel_models and smplestx_batch_size > 1:
-        print("  note       : --parallel_models runs SMPLest-X one frame at a time")
+    if model_execution_mode in {"frame_parallel", "streaming"} and smplestx_batch_size > 1:
+        print("  note       : this execution mode runs SMPLest-X one frame at a time")
     print("#" * 72)
 
     step_start = time.perf_counter()
@@ -350,6 +390,7 @@ def run_integrated_pipeline(
             wilor_dir,
             device=device,
             detector_stride=wilor_detector_stride,
+            batch_size=wilor_batch_size,
         )
         _add_step_timing(step_timings, "load_wilor", step_start)
         print("\n[load] EMOCA")
@@ -359,6 +400,7 @@ def run_integrated_pipeline(
             model_name=emoca_model,
             device=device,
             detector_stride=emoca_detector_stride,
+            batch_size=emoca_batch_size,
         )
         _add_step_timing(step_timings, "load_emoca", step_start)
 
@@ -367,6 +409,7 @@ def run_integrated_pipeline(
     model_time_totals = {key: 0.0 for key in MODEL_TIMING_KEYS}
     model_time_counts = {key: 0 for key in MODEL_TIMING_KEYS}
     per_frame_timings: list[dict] = []
+    fusion_total_sec = 0.0
     lower_body_stabilizer = LowerBodyStabilizer() if stabilize_lower_body else None
     global_orient_stabilizer = (
         GlobalOrientStabilizer() if stabilize_global_orient else None
@@ -407,6 +450,8 @@ def run_integrated_pipeline(
             "timings_sec": frame_timings,
             "total_sec": total_seconds,
             "parallel_models": parallel_models,
+            "model_execution_mode": model_execution_mode,
+            "completion_elapsed_sec": time.perf_counter() - inference_start,
         }
         if metadata:
             timing_record.update(metadata)
@@ -431,9 +476,45 @@ def run_integrated_pipeline(
 
     inference_start = time.perf_counter()
     raw_smplestx_outputs: list[tuple[str, list]] = []
+
+    def _consume_predictions(frame, out_name, body, hands, face) -> str:
+        nonlocal fusion_total_sec
+        if not body:
+            fused_outputs.append((out_name, []))
+            if save_raw_smplestx:
+                raw_smplestx_outputs.append((out_name, []))
+            stats.empty_smplestx_frames += 1
+            return "empty_smplestx"
+
+        body = _apply_stabilizers(body, frame.frame_id)
+        if save_raw_smplestx:
+            raw_smplestx_outputs.append((out_name, copy.deepcopy(body)))
+
+        if _has_hand_data(hands):
+            stats.wilor_matched += 1
+        else:
+            stats.wilor_missing += 1
+        if _has_face_data(face):
+            stats.emoca_matched += 1
+        else:
+            stats.emoca_missing += 1
+
+        fusion_start = time.perf_counter()
+        fused = fuse_frame(body, hands, face)
+        validation_errors = validate_person(fused[0])
+        fusion_total_sec += time.perf_counter() - fusion_start
+        if validation_errors:
+            stats.validation_errors += len(validation_errors)
+            stats.warnings.append(f"{out_name}: {'; '.join(validation_errors)}")
+        fused_outputs.append((out_name, fused))
+        return "ok"
+
+    if model_execution_mode == "batch_then_combine":
+        frame_iterable = list(frame_iterable)
+        frame_count = len(frame_iterable)
     progress = tqdm(total=frame_count, desc="Integrated inference")
     try:
-        if parallel_models:
+        if model_execution_mode == "frame_parallel":
             with ThreadPoolExecutor(max_workers=PARALLEL_MODEL_WORKERS) as executor:
                 for frame in frame_iterable:
                     stats.total_frames += 1
@@ -452,37 +533,13 @@ def run_integrated_pipeline(
                             frame,
                         )
                         frame_timings.update(parallel_timings)
-                        if not body:
-                            frame_status = "empty_smplestx"
-                            fused_outputs.append((out_name, []))
-                            if save_raw_smplestx:
-                                raw_smplestx_outputs.append((out_name, []))
-                            stats.empty_smplestx_frames += 1
-                            continue
-
-                        body = _apply_stabilizers(body, frame.frame_id)
-                        if save_raw_smplestx:
-                            raw_smplestx_outputs.append((out_name, copy.deepcopy(body)))
-
-                        if _has_hand_data(hands):
-                            stats.wilor_matched += 1
-                        else:
-                            stats.wilor_missing += 1
-
-                        if _has_face_data(face):
-                            stats.emoca_matched += 1
-                        else:
-                            stats.emoca_missing += 1
-
-                        fused = fuse_frame(body, hands, face)
-                        validation_errors = validate_person(fused[0])
-                        if validation_errors:
-                            stats.validation_errors += len(validation_errors)
-                            stats.warnings.append(
-                                f"{out_name}: {'; '.join(validation_errors)}"
-                            )
-
-                        fused_outputs.append((out_name, fused))
+                        frame_status = _consume_predictions(
+                            frame,
+                            out_name,
+                            body,
+                            hands,
+                            face,
+                        )
                     except Exception as exc:
                         frame_status = "error"
                         stats.errors += 1
@@ -502,7 +559,198 @@ def run_integrated_pipeline(
                                 "smplestx_batch_total_sec": frame_timings["smplestx"],
                             },
                         )
-        else:
+        elif model_execution_mode == "streaming":
+            pending = deque()
+
+            def drain_oldest() -> None:
+                item = pending.popleft()
+                frame = item["frame"]
+                out_name = item["out_name"]
+                frame_timings: dict[str, float | None] = {
+                    key: None for key in MODEL_TIMING_KEYS
+                }
+                frame_status = "ok"
+                try:
+                    body, hands, face, parallel_timings = _collect_prediction_futures(
+                        item["futures"]
+                    )
+                    frame_timings.update(parallel_timings)
+                    frame_status = _consume_predictions(
+                        frame,
+                        out_name,
+                        body,
+                        hands,
+                        face,
+                    )
+                except Exception as exc:
+                    frame_status = "error"
+                    stats.errors += 1
+                    stats.warnings.append(
+                        f"{frame.frame_id:06d}: {type(exc).__name__}: {exc}"
+                    )
+                    fused_outputs.append((out_name, []))
+                finally:
+                    _record_frame_timing(
+                        frame=frame,
+                        out_name=out_name,
+                        frame_status=frame_status,
+                        frame_timings=frame_timings,
+                        total_seconds=time.perf_counter() - item["submitted_at"],
+                        metadata={
+                            "smplestx_batch_size": 1,
+                            "smplestx_batch_total_sec": frame_timings["smplestx"],
+                            "max_inflight_frames": max_inflight_frames,
+                        },
+                    )
+
+            with (
+                ThreadPoolExecutor(max_workers=1) as body_executor,
+                ThreadPoolExecutor(max_workers=1) as hand_executor,
+                ThreadPoolExecutor(max_workers=1) as face_executor,
+            ):
+                for frame in frame_iterable:
+                    stats.total_frames += 1
+                    out_name = f"{frame.frame_id:06d}_params.pkl"
+                    pending.append(
+                        {
+                            "frame": frame,
+                            "out_name": out_name,
+                            "submitted_at": time.perf_counter(),
+                            "futures": {
+                                "smplestx": body_executor.submit(
+                                    _timed_predict,
+                                    smplestx.predict,
+                                    frame,
+                                ),
+                                "wilor": hand_executor.submit(
+                                    _timed_predict,
+                                    wilor.predict,
+                                    frame,
+                                ),
+                                "emoca": face_executor.submit(
+                                    _timed_predict,
+                                    emoca.predict,
+                                    frame,
+                                ),
+                            },
+                        }
+                    )
+                    if len(pending) >= max_inflight_frames:
+                        drain_oldest()
+                while pending:
+                    drain_oldest()
+        elif model_execution_mode == "batch_then_combine":
+            frames = list(frame_iterable)
+            stats.total_frames = len(frames)
+            body_outputs = [[] for _ in frames]
+            hand_outputs = [None for _ in frames]
+            face_outputs = [None for _ in frames]
+            frame_timing_rows = [
+                {key: None for key in MODEL_TIMING_KEYS} for _ in frames
+            ]
+            frame_errors: list[list[str]] = [[] for _ in frames]
+            body_batch_sizes = [1 for _ in frames]
+            body_batch_totals: list[float | None] = [None for _ in frames]
+
+            for batch_start_index in range(0, len(frames), smplestx_batch_size):
+                frame_batch = frames[
+                    batch_start_index : batch_start_index + smplestx_batch_size
+                ]
+                model_start = time.perf_counter()
+                try:
+                    batch_outputs = smplestx.predict_batch(frame_batch)
+                    if len(batch_outputs) != len(frame_batch):
+                        raise RuntimeError(
+                            "SMPLest-X batch result length mismatch: "
+                            f"{len(batch_outputs)} results for {len(frame_batch)} frames"
+                        )
+                except Exception as exc:
+                    batch_outputs = [[] for _ in frame_batch]
+                    for offset in range(len(frame_batch)):
+                        frame_errors[batch_start_index + offset].append(
+                            f"smplestx: {type(exc).__name__}: {exc}"
+                        )
+                batch_seconds = time.perf_counter() - model_start
+                per_frame_seconds = batch_seconds / max(1, len(frame_batch))
+                for offset, body in enumerate(batch_outputs):
+                    index = batch_start_index + offset
+                    body_outputs[index] = body
+                    frame_timing_rows[index]["smplestx"] = per_frame_seconds
+                    body_batch_sizes[index] = len(frame_batch)
+                    body_batch_totals[index] = batch_seconds
+
+            model_start = time.perf_counter()
+            try:
+                hand_outputs = wilor.predict_batch(frames)
+                if len(hand_outputs) != len(frames):
+                    raise RuntimeError(
+                        "WiLoR batch result length mismatch: "
+                        f"{len(hand_outputs)} results for {len(frames)} frames"
+                    )
+            except Exception as exc:
+                hand_outputs = [None for _ in frames]
+                for errors in frame_errors:
+                    errors.append(f"wilor: {type(exc).__name__}: {exc}")
+            wilor_seconds_per_frame = (
+                time.perf_counter() - model_start
+            ) / max(1, len(frames))
+            for timings in frame_timing_rows:
+                timings["wilor"] = wilor_seconds_per_frame
+
+            model_start = time.perf_counter()
+            try:
+                face_outputs = emoca.predict_batch(frames)
+                if len(face_outputs) != len(frames):
+                    raise RuntimeError(
+                        "EMOCA batch result length mismatch: "
+                        f"{len(face_outputs)} results for {len(frames)} frames"
+                    )
+            except Exception as exc:
+                face_outputs = [None for _ in frames]
+                for errors in frame_errors:
+                    errors.append(f"emoca: {type(exc).__name__}: {exc}")
+            emoca_seconds_per_frame = (
+                time.perf_counter() - model_start
+            ) / max(1, len(frames))
+            for timings in frame_timing_rows:
+                timings["emoca"] = emoca_seconds_per_frame
+
+            for index, frame in enumerate(frames):
+                out_name = f"{frame.frame_id:06d}_params.pkl"
+                frame_timings = frame_timing_rows[index]
+                combine_start = time.perf_counter()
+                if frame_errors[index]:
+                    frame_status = "error"
+                    stats.errors += 1
+                    stats.warnings.append(
+                        f"{frame.frame_id:06d}: {'; '.join(frame_errors[index])}"
+                    )
+                    fused_outputs.append((out_name, []))
+                else:
+                    frame_status = _consume_predictions(
+                        frame,
+                        out_name,
+                        body_outputs[index],
+                        hand_outputs[index],
+                        face_outputs[index],
+                    )
+                combine_seconds = time.perf_counter() - combine_start
+                model_seconds = sum(
+                    float(value) for value in frame_timings.values() if value is not None
+                )
+                _record_frame_timing(
+                    frame=frame,
+                    out_name=out_name,
+                    frame_status=frame_status,
+                    frame_timings=frame_timings,
+                    total_seconds=model_seconds + combine_seconds,
+                    metadata={
+                        "smplestx_batch_size": body_batch_sizes[index],
+                        "smplestx_batch_total_sec": body_batch_totals[index],
+                        "combine_sec": combine_seconds,
+                    },
+                )
+        elif model_execution_mode == "sequential_batched":
             for frame_batch in _iter_batches(frame_iterable, smplestx_batch_size):
                 batch_start = time.perf_counter()
                 batch_error: Exception | None = None
@@ -569,8 +817,10 @@ def run_integrated_pipeline(
                         else:
                             stats.emoca_missing += 1
 
+                        fusion_start = time.perf_counter()
                         fused = fuse_frame(body, hands, face)
                         validation_errors = validate_person(fused[0])
+                        fusion_total_sec += time.perf_counter() - fusion_start
                         if validation_errors:
                             stats.validation_errors += len(validation_errors)
                             stats.warnings.append(
@@ -615,7 +865,11 @@ def run_integrated_pipeline(
             "metadata": {
                 "frames": stats.total_frames,
                 "smplestx_batch_size": smplestx_batch_size,
+                "wilor_batch_size": max(1, int(wilor_batch_size)),
+                "emoca_batch_size": max(1, int(emoca_batch_size)),
                 "parallel_models": parallel_models,
+                "model_execution_mode": model_execution_mode,
+                "max_inflight_frames": max_inflight_frames,
                 "wilor_detector_stride": max(1, wilor_detector_stride),
                 "emoca_detector_stride": max(1, emoca_detector_stride),
             },
@@ -687,7 +941,14 @@ def run_integrated_pipeline(
         },
         "inference_total_sec": inference_total_sec,
         "inference_total_ms": inference_total_sec * 1000,
+        "fusion_total_sec": fusion_total_sec,
+        "fusion_total_ms": fusion_total_sec * 1000,
+        "fusion_average_ms_per_frame": (
+            fusion_total_sec * 1000 / stats.total_frames if stats.total_frames else None
+        ),
         "parallel_models": parallel_models,
+        "model_execution_mode": model_execution_mode,
+        "max_inflight_frames": max_inflight_frames,
         "fused_params_written": bool(write_fused_params),
         "parallel_model_workers": PARALLEL_MODEL_WORKERS if parallel_models else 0,
         "render_total_sec": None,
@@ -738,6 +999,11 @@ def run_integrated_pipeline(
         )
     )
     print(f"  inference_total={_format_timing_ms(inference_total_sec)}")
+    print(
+        "  fusion_combine="
+        f"{_format_timing_ms(fusion_total_sec)} total "
+        f"({_format_timing_ms(fusion_total_sec / stats.total_frames)} per frame)"
+    )
 
     if smplestx_only:
         step_timings.append(
@@ -957,11 +1223,17 @@ def run_integrated_pipeline(
             "inference_mode": smplestx_inference_mode,
             "single_gpu_model": smplestx_single_gpu_model,
         },
+        "specialist_batch_sizes": {
+            "wilor": max(1, int(wilor_batch_size)),
+            "emoca": max(1, int(emoca_batch_size)),
+        },
         "auxiliary_detector_optimization": {
             "wilor_detector_stride": max(1, wilor_detector_stride),
             "emoca_detector_stride": max(1, emoca_detector_stride),
         },
         "parallel_models": parallel_models,
+        "model_execution_mode": model_execution_mode,
+        "max_inflight_frames": max_inflight_frames,
         "lower_body_stabilization": {
             "enabled": stabilize_lower_body,
             "reference_frame_id": (
@@ -1080,6 +1352,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--wilor_batch_size",
+        type=int,
+        default=16,
+        help="Hand-crop batch size used by batch_then_combine.",
+    )
+    parser.add_argument(
+        "--emoca_batch_size",
+        type=int,
+        default=16,
+        help="Face-crop batch size used by batch_then_combine.",
+    )
+    parser.add_argument(
         "--wilor_detector_stride",
         type=int,
         default=1,
@@ -1108,6 +1392,23 @@ def build_parser() -> argparse.ArgumentParser:
             "Run SMPLest-X, WiLoR, and EMOCA predict calls concurrently per frame. "
             "Default keeps the sequential/batched path."
         ),
+    )
+    parser.add_argument(
+        "--model_execution_mode",
+        choices=MODEL_EXECUTION_MODES,
+        default=None,
+        help=(
+            "Explicit model schedule. frame_parallel waits after every frame; "
+            "streaming keeps bounded frames in flight; batch_then_combine runs "
+            "all body, hand, and face passes before fusion; sequential_batched "
+            "uses the legacy SMPLest-X batch path. Overrides --parallel_models."
+        ),
+    )
+    parser.add_argument(
+        "--max_inflight_frames",
+        type=int,
+        default=4,
+        help="Maximum queued frames for model_execution_mode=streaming.",
     )
     parser.add_argument(
         "--save_raw_smplestx",
@@ -1190,9 +1491,13 @@ def main() -> None:
         wilor_detector_stride=args.wilor_detector_stride,
         emoca_detector_stride=args.emoca_detector_stride,
         smplestx_batch_size=args.smplestx_batch_size,
+        wilor_batch_size=args.wilor_batch_size,
+        emoca_batch_size=args.emoca_batch_size,
         smplestx_inference_mode=args.smplestx_inference_mode,
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,
         parallel_models=args.parallel_models,
+        model_execution_mode=args.model_execution_mode,
+        max_inflight_frames=args.max_inflight_frames,
         save_raw_smplestx=args.save_raw_smplestx,
         smplestx_only=args.smplestx_only,
         write_fused_params=args.write_fused_params,

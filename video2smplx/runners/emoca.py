@@ -25,11 +25,13 @@ class EMOCARunner:
         scale: float = 1.25,
         face_detector_threshold: float = 0.5,
         detector_stride: int = 1,
+        batch_size: int = 16,
     ):
         self.project_dir = Path(project_dir).resolve()
         self.model_name = model_name
         self.crop_size = crop_size
         self.scale = scale
+        self.batch_size = max(1, int(batch_size))
         self.detector_stride = max(1, int(detector_stride))
         self._cached_face_bbox: tuple[float, float, float, float, Any] | None = None
         self.device = torch.device(device if device == "cuda" and torch.cuda.is_available() else "cpu")
@@ -180,6 +182,9 @@ class EMOCARunner:
         with torch.inference_mode():
             vals = self.emoca.encode(batch, training=False)
 
+        return self._result_from_values(vals)
+
+    def _result_from_values(self, vals: dict[str, Any]) -> dict[str, Any]:
         result = self.empty_result()
         exp = self._numpy(vals, "expcode")
         if exp is None:
@@ -202,3 +207,35 @@ class EMOCARunner:
         result["light"] = self._numpy(vals, "lightcode")
         result["tex"] = self._numpy(vals, "texcode")
         return result
+
+    def predict_batch(self, frames: list[FrameInput]) -> list[dict[str, Any]]:
+        """Crop all faces first, then encode them in GPU micro-batches."""
+        crops = []
+        for frame in frames:
+            if frame.image_bgr is not None:
+                image_bgr = frame.image_bgr
+            elif frame.path is not None:
+                image_bgr = cv2.imread(str(frame.path))
+            else:
+                raise ValueError("FrameInput must contain either image_bgr or path.")
+            if image_bgr is None:
+                raise FileNotFoundError(f"Could not read frame: {frame.path}")
+            image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+            crops.append(self._crop_face(image_rgb, frame.frame_id))
+
+        results: list[dict[str, Any]] = []
+        for start in range(0, len(crops), self.batch_size):
+            crop_batch = torch.stack(crops[start : start + self.batch_size]).to(self.device)
+            with torch.inference_mode():
+                values = self.emoca.encode({"image": crop_batch}, training=False)
+            batch_count = int(crop_batch.shape[0])
+            for index in range(batch_count):
+                one_values = {}
+                for key, value in values.items():
+                    shape = getattr(value, "shape", None)
+                    if shape is not None and len(shape) > 0 and shape[0] == batch_count:
+                        one_values[key] = value[index : index + 1]
+                    else:
+                        one_values[key] = value
+                results.append(self._result_from_values(one_values))
+        return results

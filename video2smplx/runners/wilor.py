@@ -141,32 +141,86 @@ class WiLoRRunner:
 
             batch_size = batch["img"].shape[0]
             for n in range(batch_size):
-                is_right_hand = batch["right"][n].detach().cpu().numpy()
-                wrist_rotmat = (
-                    out["pred_mano_params"]["global_orient"][n]
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
-                finger_rotmat = (
-                    out["pred_mano_params"]["hand_pose"][n]
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
-                betas = out["pred_mano_params"]["betas"][n].detach().cpu().numpy()
-
-                wrist_aa = self.Rotation.from_matrix(wrist_rotmat.squeeze(0)).as_rotvec()
-                fingers_aa = self.Rotation.from_matrix(finger_rotmat).as_rotvec()
-
-                if is_right_hand == 1.0:
-                    frame_params["right_hand_pose"] = fingers_aa.flatten()
-                    frame_params["right_hand_betas"] = betas
-                    frame_params["right_hand_global_orient"] = wrist_aa
-                else:
-                    reflection_vector = np.array([1, -1, -1])
-                    frame_params["left_hand_pose"] = (fingers_aa * reflection_vector).flatten()
-                    frame_params["left_hand_betas"] = betas
-                    frame_params["left_hand_global_orient"] = wrist_aa * reflection_vector
+                self._assign_prediction(frame_params, batch, out, n)
 
         return frame_params
+
+    def _assign_prediction(self, frame_params, batch, out, index: int) -> None:
+        is_right_hand = batch["right"][index].detach().cpu().numpy()
+        wrist_rotmat = (
+            out["pred_mano_params"]["global_orient"][index]
+            .detach()
+            .cpu()
+            .numpy()
+        )
+        finger_rotmat = (
+            out["pred_mano_params"]["hand_pose"][index]
+            .detach()
+            .cpu()
+            .numpy()
+        )
+        betas = out["pred_mano_params"]["betas"][index].detach().cpu().numpy()
+
+        wrist_aa = self.Rotation.from_matrix(wrist_rotmat.squeeze(0)).as_rotvec()
+        fingers_aa = self.Rotation.from_matrix(finger_rotmat).as_rotvec()
+
+        if is_right_hand == 1.0:
+            frame_params["right_hand_pose"] = fingers_aa.flatten()
+            frame_params["right_hand_betas"] = betas
+            frame_params["right_hand_global_orient"] = wrist_aa
+        else:
+            reflection_vector = np.array([1, -1, -1])
+            frame_params["left_hand_pose"] = (fingers_aa * reflection_vector).flatten()
+            frame_params["left_hand_betas"] = betas
+            frame_params["left_hand_global_orient"] = wrist_aa * reflection_vector
+
+    def predict_batch(self, frames: list[FrameInput]) -> list[dict[str, Any]]:
+        """Detect each frame, then batch all detected hand crops for MANO inference."""
+        results = [self.empty_result() for _ in frames]
+        datasets = []
+        frame_indices: list[int] = []
+
+        for frame_index, frame in enumerate(frames):
+            if frame.image_bgr is not None:
+                image_bgr = frame.image_bgr.copy()
+            elif frame.path is not None:
+                image_bgr = cv2.imread(str(frame.path))
+            else:
+                raise ValueError("FrameInput must contain either image_bgr or path.")
+            if image_bgr is None:
+                raise FileNotFoundError(f"Could not read frame: {frame.path}")
+
+            boxes, handedness = self._hand_boxes(frame, image_bgr)
+            if len(boxes) == 0:
+                continue
+            dataset = self.ViTDetDataset(
+                self.model_cfg,
+                image_bgr,
+                boxes,
+                handedness,
+                rescale_factor=self.rescale_factor,
+            )
+            datasets.append(dataset)
+            frame_indices.extend([frame_index] * len(dataset))
+
+        if not datasets:
+            return results
+
+        dataset = self.torch.utils.data.ConcatDataset(datasets)
+        dataloader = self.torch.utils.data.DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=0,
+        )
+        cursor = 0
+        for batch in dataloader:
+            batch = self.recursive_to(batch, self.device)
+            with self.torch.inference_mode():
+                out = self.model(batch)
+            batch_count = int(batch["img"].shape[0])
+            for index in range(batch_count):
+                frame_index = frame_indices[cursor + index]
+                self._assign_prediction(results[frame_index], batch, out, index)
+            cursor += batch_count
+        return results
