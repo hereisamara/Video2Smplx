@@ -43,6 +43,15 @@ base fusion
 
 Use the postprocessed script for the current best SignLanguage result.
 
+The unified CLI can independently disable WiLoR/MANO, EMOCA, learned
+correctors, zero-translation, and smoothing. It also supports realtime,
+bounded-streaming, and offline-batch execution. See:
+
+```text
+delivery/docs/RUN_CONFIGURATION_GUIDE.md
+delivery/scripts/slurm_benchmark_execution_modes.sh
+```
+
 For runtime/complexity reporting, use:
 
 ```text

@@ -147,11 +147,23 @@ def _timed_predict(predict_fn, frame) -> dict:
         }
 
 
+def _disabled_prediction(_frame) -> dict:
+    return {}
+
+
 def _predict_frame_parallel(executor, smplestx, wilor, emoca, frame):
     futures = {
         "smplestx": executor.submit(_timed_predict, smplestx.predict, frame),
-        "wilor": executor.submit(_timed_predict, wilor.predict, frame),
-        "emoca": executor.submit(_timed_predict, emoca.predict, frame),
+        "wilor": executor.submit(
+            _timed_predict,
+            wilor.predict if wilor is not None else _disabled_prediction,
+            frame,
+        ),
+        "emoca": executor.submit(
+            _timed_predict,
+            emoca.predict if emoca is not None else _disabled_prediction,
+            frame,
+        ),
     }
     return _collect_prediction_futures(futures)
 
@@ -229,6 +241,8 @@ def run_integrated_pipeline(
     parallel_models: bool = False,
     model_execution_mode: str | None = None,
     max_inflight_frames: int = 4,
+    enable_wilor: bool = True,
+    enable_emoca: bool = True,
     save_raw_smplestx: bool = False,
     smplestx_only: bool = False,
     write_fused_params: bool = True,
@@ -245,6 +259,8 @@ def run_integrated_pipeline(
     max_inflight_frames = max(1, int(max_inflight_frames))
     parallel_models = model_execution_mode in {"frame_parallel", "streaming"}
     if smplestx_only:
+        enable_wilor = False
+        enable_emoca = False
         save_raw_smplestx = True
         skip_render = True
 
@@ -332,8 +348,8 @@ def run_integrated_pipeline(
     print(f"  smplestx   : {smplestx_dir}")
     print(f"  mode       : {'SMPLest-X only' if smplestx_only else 'SMPLest-X + WiLoR + EMOCA fusion'}")
     if not smplestx_only:
-        print(f"  wilor      : {wilor_dir}")
-        print(f"  emoca      : {emoca_dir}")
+        print(f"  wilor      : {wilor_dir if enable_wilor else 'disabled'}")
+        print(f"  emoca      : {emoca_dir if enable_emoca else 'disabled'}")
     if frame_count is None:
         print(f"  frames     : {frame_source}")
     else:
@@ -363,8 +379,9 @@ def run_integrated_pipeline(
 
     step_start = time.perf_counter()
     from video2smplx.runners.smplestx import SmplestXRunner
-    if not smplestx_only:
+    if enable_emoca:
         from video2smplx.runners.emoca import EMOCARunner
+    if enable_wilor:
         from video2smplx.runners.wilor import WiLoRRunner
     _add_step_timing(step_timings, "import_runners", step_start)
 
@@ -383,7 +400,7 @@ def run_integrated_pipeline(
     _add_step_timing(step_timings, "load_smplestx", step_start)
     wilor = None
     emoca = None
-    if not smplestx_only:
+    if enable_wilor:
         print("\n[load] WiLoR")
         step_start = time.perf_counter()
         wilor = WiLoRRunner(
@@ -393,6 +410,7 @@ def run_integrated_pipeline(
             batch_size=wilor_batch_size,
         )
         _add_step_timing(step_timings, "load_wilor", step_start)
+    if enable_emoca:
         print("\n[load] EMOCA")
         step_start = time.perf_counter()
         emoca = EMOCARunner(
@@ -490,14 +508,16 @@ def run_integrated_pipeline(
         if save_raw_smplestx:
             raw_smplestx_outputs.append((out_name, copy.deepcopy(body)))
 
-        if _has_hand_data(hands):
-            stats.wilor_matched += 1
-        else:
-            stats.wilor_missing += 1
-        if _has_face_data(face):
-            stats.emoca_matched += 1
-        else:
-            stats.emoca_missing += 1
+        if enable_wilor:
+            if _has_hand_data(hands):
+                stats.wilor_matched += 1
+            else:
+                stats.wilor_missing += 1
+        if enable_emoca:
+            if _has_face_data(face):
+                stats.emoca_matched += 1
+            else:
+                stats.emoca_missing += 1
 
         fusion_start = time.perf_counter()
         fused = fuse_frame(body, hands, face)
@@ -533,6 +553,10 @@ def run_integrated_pipeline(
                             frame,
                         )
                         frame_timings.update(parallel_timings)
+                        if not enable_wilor:
+                            frame_timings["wilor"] = None
+                        if not enable_emoca:
+                            frame_timings["emoca"] = None
                         frame_status = _consume_predictions(
                             frame,
                             out_name,
@@ -575,6 +599,10 @@ def run_integrated_pipeline(
                         item["futures"]
                     )
                     frame_timings.update(parallel_timings)
+                    if not enable_wilor:
+                        frame_timings["wilor"] = None
+                    if not enable_emoca:
+                        frame_timings["emoca"] = None
                     frame_status = _consume_predictions(
                         frame,
                         out_name,
@@ -624,12 +652,12 @@ def run_integrated_pipeline(
                                 ),
                                 "wilor": hand_executor.submit(
                                     _timed_predict,
-                                    wilor.predict,
+                                    wilor.predict if wilor is not None else _disabled_prediction,
                                     frame,
                                 ),
                                 "emoca": face_executor.submit(
                                     _timed_predict,
-                                    emoca.predict,
+                                    emoca.predict if emoca is not None else _disabled_prediction,
                                     frame,
                                 ),
                             },
@@ -679,41 +707,47 @@ def run_integrated_pipeline(
                     body_batch_sizes[index] = len(frame_batch)
                     body_batch_totals[index] = batch_seconds
 
-            model_start = time.perf_counter()
-            try:
-                hand_outputs = wilor.predict_batch(frames)
-                if len(hand_outputs) != len(frames):
-                    raise RuntimeError(
-                        "WiLoR batch result length mismatch: "
-                        f"{len(hand_outputs)} results for {len(frames)} frames"
-                    )
-            except Exception as exc:
-                hand_outputs = [None for _ in frames]
-                for errors in frame_errors:
-                    errors.append(f"wilor: {type(exc).__name__}: {exc}")
-            wilor_seconds_per_frame = (
-                time.perf_counter() - model_start
-            ) / max(1, len(frames))
-            for timings in frame_timing_rows:
-                timings["wilor"] = wilor_seconds_per_frame
+            if enable_wilor:
+                model_start = time.perf_counter()
+                try:
+                    hand_outputs = wilor.predict_batch(frames)
+                    if len(hand_outputs) != len(frames):
+                        raise RuntimeError(
+                            "WiLoR batch result length mismatch: "
+                            f"{len(hand_outputs)} results for {len(frames)} frames"
+                        )
+                except Exception as exc:
+                    hand_outputs = [None for _ in frames]
+                    for errors in frame_errors:
+                        errors.append(f"wilor: {type(exc).__name__}: {exc}")
+                wilor_seconds_per_frame = (
+                    time.perf_counter() - model_start
+                ) / max(1, len(frames))
+                for timings in frame_timing_rows:
+                    timings["wilor"] = wilor_seconds_per_frame
+            else:
+                hand_outputs = [{} for _ in frames]
 
-            model_start = time.perf_counter()
-            try:
-                face_outputs = emoca.predict_batch(frames)
-                if len(face_outputs) != len(frames):
-                    raise RuntimeError(
-                        "EMOCA batch result length mismatch: "
-                        f"{len(face_outputs)} results for {len(frames)} frames"
-                    )
-            except Exception as exc:
-                face_outputs = [None for _ in frames]
-                for errors in frame_errors:
-                    errors.append(f"emoca: {type(exc).__name__}: {exc}")
-            emoca_seconds_per_frame = (
-                time.perf_counter() - model_start
-            ) / max(1, len(frames))
-            for timings in frame_timing_rows:
-                timings["emoca"] = emoca_seconds_per_frame
+            if enable_emoca:
+                model_start = time.perf_counter()
+                try:
+                    face_outputs = emoca.predict_batch(frames)
+                    if len(face_outputs) != len(frames):
+                        raise RuntimeError(
+                            "EMOCA batch result length mismatch: "
+                            f"{len(face_outputs)} results for {len(frames)} frames"
+                        )
+                except Exception as exc:
+                    face_outputs = [None for _ in frames]
+                    for errors in frame_errors:
+                        errors.append(f"emoca: {type(exc).__name__}: {exc}")
+                emoca_seconds_per_frame = (
+                    time.perf_counter() - model_start
+                ) / max(1, len(frames))
+                for timings in frame_timing_rows:
+                    timings["emoca"] = emoca_seconds_per_frame
+            else:
+                face_outputs = [{} for _ in frames]
 
             for index, frame in enumerate(frames):
                 out_name = f"{frame.frame_id:06d}_params.pkl"
@@ -795,27 +829,31 @@ def run_integrated_pipeline(
                             frame_status = "ok_smplestx_only"
                             continue
 
-                        model_start = time.perf_counter()
-                        try:
-                            assert wilor is not None
-                            hands = wilor.predict(frame)
-                        finally:
-                            frame_timings["wilor"] = time.perf_counter() - model_start
-                        if _has_hand_data(hands):
-                            stats.wilor_matched += 1
-                        else:
-                            stats.wilor_missing += 1
+                        hands = {}
+                        if enable_wilor:
+                            model_start = time.perf_counter()
+                            try:
+                                assert wilor is not None
+                                hands = wilor.predict(frame)
+                            finally:
+                                frame_timings["wilor"] = time.perf_counter() - model_start
+                            if _has_hand_data(hands):
+                                stats.wilor_matched += 1
+                            else:
+                                stats.wilor_missing += 1
 
-                        model_start = time.perf_counter()
-                        try:
-                            assert emoca is not None
-                            face = emoca.predict(frame)
-                        finally:
-                            frame_timings["emoca"] = time.perf_counter() - model_start
-                        if _has_face_data(face):
-                            stats.emoca_matched += 1
-                        else:
-                            stats.emoca_missing += 1
+                        face = {}
+                        if enable_emoca:
+                            model_start = time.perf_counter()
+                            try:
+                                assert emoca is not None
+                                face = emoca.predict(frame)
+                            finally:
+                                frame_timings["emoca"] = time.perf_counter() - model_start
+                            if _has_face_data(face):
+                                stats.emoca_matched += 1
+                            else:
+                                stats.emoca_missing += 1
 
                         fusion_start = time.perf_counter()
                         fused = fuse_frame(body, hands, face)
@@ -949,6 +987,11 @@ def run_integrated_pipeline(
         "parallel_models": parallel_models,
         "model_execution_mode": model_execution_mode,
         "max_inflight_frames": max_inflight_frames,
+        "enabled_models": {
+            "smplestx": True,
+            "wilor_mano": bool(enable_wilor),
+            "emoca": bool(enable_emoca),
+        },
         "fused_params_written": bool(write_fused_params),
         "parallel_model_workers": PARALLEL_MODEL_WORKERS if parallel_models else 0,
         "render_total_sec": None,
@@ -1234,6 +1277,11 @@ def run_integrated_pipeline(
         "parallel_models": parallel_models,
         "model_execution_mode": model_execution_mode,
         "max_inflight_frames": max_inflight_frames,
+        "enabled_models": {
+            "smplestx": True,
+            "wilor_mano": bool(enable_wilor),
+            "emoca": bool(enable_emoca),
+        },
         "lower_body_stabilization": {
             "enabled": stabilize_lower_body,
             "reference_frame_id": (
@@ -1411,6 +1459,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum queued frames for model_execution_mode=streaming.",
     )
     parser.add_argument(
+        "--disable_wilor",
+        action="store_true",
+        help="Disable WiLoR/MANO hand estimation and keep SMPLest-X hand parameters.",
+    )
+    parser.add_argument(
+        "--disable_emoca",
+        action="store_true",
+        help="Disable EMOCA face estimation and keep SMPLest-X face parameters.",
+    )
+    parser.add_argument(
         "--save_raw_smplestx",
         action="store_true",
         help="Also save SMPLest-X-only per-frame PKLs to <output>/smplestx_params before fusion.",
@@ -1498,6 +1556,8 @@ def main() -> None:
         parallel_models=args.parallel_models,
         model_execution_mode=args.model_execution_mode,
         max_inflight_frames=args.max_inflight_frames,
+        enable_wilor=not args.disable_wilor,
+        enable_emoca=not args.disable_emoca,
         save_raw_smplestx=args.save_raw_smplestx,
         smplestx_only=args.smplestx_only,
         write_fused_params=args.write_fused_params,

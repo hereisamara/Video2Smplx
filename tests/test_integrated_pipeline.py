@@ -102,6 +102,8 @@ class IntegratedPipelineHelpersTest(unittest.TestCase):
                 "streaming",
                 "--max_inflight_frames",
                 "3",
+                "--disable_wilor",
+                "--disable_emoca",
             ]
         )
 
@@ -111,6 +113,8 @@ class IntegratedPipelineHelpersTest(unittest.TestCase):
         self.assertEqual(args.emoca_detector_stride, 5)
         self.assertEqual(args.model_execution_mode, "streaming")
         self.assertEqual(args.max_inflight_frames, 3)
+        self.assertTrue(args.disable_wilor)
+        self.assertTrue(args.disable_emoca)
 
 
 if __name__ == "__main__":

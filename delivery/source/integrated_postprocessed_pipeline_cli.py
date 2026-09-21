@@ -81,6 +81,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--smplx-model", default=str(DEFAULT_SMPLX_MODEL))
     parser.add_argument("--eval-model", default="signlanguage_global_correction_server/models/SMPLX_FEMALE.npz")
     parser.add_argument("--multi-person", action="store_true")
+    parser.add_argument(
+        "--smplestx-only",
+        action="store_true",
+        help=(
+            "Run raw SMPLest-X without WiLoR/MANO, EMOCA, learned correctors, "
+            "zero-translation, or smoothing. Final NPZ export remains enabled."
+        ),
+    )
+    parser.add_argument(
+        "--disable-wilor",
+        "--disable-mano",
+        "--disable-hand-estimation",
+        dest="disable_wilor",
+        action="store_true",
+        help="Disable WiLoR and its MANO hand regression stage.",
+    )
+    parser.add_argument(
+        "--disable-emoca",
+        "--disable-face-estimation",
+        dest="disable_emoca",
+        action="store_true",
+        help="Disable EMOCA face estimation.",
+    )
     parser.add_argument("--smplestx-detector-stride", type=int, default=5)
     parser.add_argument(
         "--wilor-detector-stride",
@@ -118,12 +141,31 @@ def parse_args() -> argparse.Namespace:
         default=4,
         help="Maximum queued frames in streaming execution mode.",
     )
+    parser.add_argument(
+        "--execution-mode",
+        choices=("realtime", "streaming", "batch"),
+        default=None,
+        help=(
+            "User-facing execution preset: realtime=frame barrier, "
+            "streaming=bounded frames in flight, batch=all model passes then fusion."
+        ),
+    )
     parser.add_argument("--stabilize-global-orient", action="store_true")
     parser.add_argument("--stabilize-shape", action="store_true")
     parser.add_argument("--stabilize-lower-body", action="store_true")
     parser.add_argument("--stabilize-torso", action="store_true")
     parser.add_argument("--smooth-window", type=int, default=15)
     parser.add_argument("--smooth-poly", type=int, default=3)
+    parser.add_argument(
+        "--disable-smoothing",
+        action="store_true",
+        help="Export unsmoothed final SMPL-X parameters.",
+    )
+    parser.add_argument(
+        "--disable-zero-translation",
+        action="store_true",
+        help="Preserve predicted translation instead of setting it to zero before export.",
+    )
     parser.add_argument("--viewport", type=int, default=800)
     parser.add_argument("--skip-render", action="store_true")
     parser.add_argument("--disable-postprocessing", action="store_true")
@@ -658,18 +700,22 @@ def render_param_frames(
     skip_render: bool,
     save_render_params: bool,
     params_source: str,
+    zero_translation: bool,
+    smoothing: bool,
 ) -> dict[str, Any]:
     if not frames:
         raise ValueError("No parameter frames to export")
     render_dir = output_dir / "rendered"
     render_params_dir = render_dir / "params"
 
-    render_frames = stage_zero_transl(copy.deepcopy(frames))
+    render_frames = copy.deepcopy(frames)
+    if zero_translation:
+        render_frames = stage_zero_transl(render_frames)
     valid_count = sum(first_person(frame) is not None for frame in render_frames)
     window = min(smooth_window, valid_count)
     if window % 2 == 0:
         window -= 1
-    if window > smooth_poly:
+    if smoothing and window > smooth_poly:
         render_frames = stage_smooth(render_frames, window, smooth_poly)
     if save_render_params:
         render_params_dir.mkdir(parents=True, exist_ok=True)
@@ -693,6 +739,8 @@ def render_param_frames(
         make_side_by_side(input_video, rendered_video, side_by_side, fps)
     return {
         "frames": len(frame_ids),
+        "zero_translation": zero_translation,
+        "smoothing": smoothing,
         "params_source": params_source,
         "params_dir": None if params_source == "memory" else params_source,
         "render_params": str(render_params_dir) if save_render_params else None,
@@ -712,6 +760,8 @@ def render_param_dir(
     smooth_poly: int,
     viewport: int,
     skip_render: bool,
+    zero_translation: bool,
+    smoothing: bool,
 ) -> dict[str, Any]:
     files = list_param_files(params_dir)
     if not files:
@@ -731,6 +781,8 @@ def render_param_dir(
         skip_render,
         save_render_params=True,
         params_source=str(params_dir),
+        zero_translation=zero_translation,
+        smoothing=smoothing,
     )
 
 
@@ -844,6 +896,24 @@ def initial_load_summary(base_summary: dict[str, Any]) -> dict[str, Any]:
 
 def main() -> None:
     args = parse_args()
+    execution_presets = {
+        "realtime": "frame_parallel",
+        "streaming": "streaming",
+        "batch": "batch_then_combine",
+    }
+    if args.execution_mode is not None:
+        preset_mode = execution_presets[args.execution_mode]
+        if args.model_execution_mode not in (None, preset_mode):
+            raise ValueError(
+                "--execution-mode and --model-execution-mode select different schedules"
+            )
+        args.model_execution_mode = preset_mode
+    if args.smplestx_only:
+        args.disable_wilor = True
+        args.disable_emoca = True
+        args.disable_postprocessing = True
+        args.disable_zero_translation = True
+        args.disable_smoothing = True
     output = Path(args.output).resolve()
     video = Path(args.video).resolve()
     sequence = args.sequence or args.name or video.stem
@@ -858,6 +928,14 @@ def main() -> None:
         "postprocessing_enabled": not args.disable_postprocessing and args.postprocess_mode != "none",
         "storage_mode": "memory" if args.fast_io else "per_frame_pkl",
         "settings": vars(args),
+        "components": {
+            "smplestx": True,
+            "wilor_mano": not args.disable_wilor,
+            "emoca": not args.disable_emoca,
+            "learned_postprocessors": not args.disable_postprocessing,
+            "zero_translation": not args.disable_zero_translation,
+            "smoothing": not args.disable_smoothing,
+        },
     }
 
     start = time.perf_counter()
@@ -893,6 +971,8 @@ def main() -> None:
         parallel_models=args.parallel_models,
         model_execution_mode=args.model_execution_mode,
         max_inflight_frames=args.max_inflight_frames,
+        enable_wilor=not args.disable_wilor,
+        enable_emoca=not args.disable_emoca,
         write_fused_params=not args.fast_io,
         return_fused_outputs=args.fast_io,
         per_frame_timing_log_interval=args.timing_log_interval,
@@ -1038,6 +1118,8 @@ def main() -> None:
             args.skip_render,
             save_render_params=args.save_final_pkls,
             params_source="memory",
+            zero_translation=not args.disable_zero_translation,
+            smoothing=not args.disable_smoothing,
         )
     else:
         render_report = render_param_dir(
@@ -1050,6 +1132,8 @@ def main() -> None:
             args.smooth_poly,
             args.viewport,
             args.skip_render,
+            zero_translation=not args.disable_zero_translation,
+            smoothing=not args.disable_smoothing,
         )
     add_timing(timings, "final_npz_smooth_render", start, frames)
     report["final_outputs"] = render_report

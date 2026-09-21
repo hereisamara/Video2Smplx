@@ -19,6 +19,7 @@ reproduction.
 | Literature review and technical study report | Provided | `delivery/docs/TECHNICAL_STUDY_REPORT.md` |
 | Installation manual | Provided | `delivery/docs/INSTALLATION.md` |
 | Complete user documentation | Provided | `delivery/docs/USER_DOCUMENTATION.md` |
+| Runtime component and processing controls | Provided | `delivery/docs/RUN_CONFIGURATION_GUIDE.md` |
 | Model setup and download instructions | Provided | `delivery/docs/MODEL_SETUP.md` |
 | Reproducible examples | Provided | `delivery/docs/REPRODUCIBLE_EXAMPLES.md` |
 | Sample sign-language video and processing results | Provided / generated | `delivery/sample/` and server ablation sample outputs |
@@ -161,6 +162,10 @@ Post-processing modes:
 | `global_hand` | Base fusion + global + hand correction | No |
 | `fast` | Alias for global + hand correction | No |
 | `accurate` | Global + hand + 2D-guided upper-body correction | Yes |
+
+Body-only execution, WiLoR/MANO and EMOCA toggles, realtime/streaming/batch
+schedules, smoothing, zero-translation, and learned-corrector controls are
+documented in `delivery/docs/RUN_CONFIGURATION_GUIDE.md`.
 
 ## 5. Stabilization And Requirement Control
 
