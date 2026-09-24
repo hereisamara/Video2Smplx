@@ -154,11 +154,25 @@ Each run writes:
 <output>/final_*/smplx_params.npz
 <output>/runtime/integrated_postprocessed_runtime_report.json
 <output>/runtime/integrated_postprocessed_runtime_report.csv
+<output>/runtime/runtime_phase_summary.csv
 ```
 
 The JSON report records every enabled component and all effective settings.
 The runtime includes fusion, enabled correctors, smoothing, and final NPZ
 export. Initial model loading and optional rendering are reported separately.
+
+`runtime_phase_summary.csv` separates delivery timing into:
+
+- `startup_model_load`: imports, checkpoint loading, and model construction.
+- `first_forward_warmup`: the first complete batch in batch mode, or the
+  configured number of initial frames in realtime/streaming modes.
+- `normal_working`: steady model throughput after warm-up. This is the FPS to
+  report as normal continuous operation.
+- `cold_end_to_end`: one-shot execution including startup and final output.
+
+Batch mode excludes one complete first batch by default. Override this with
+`WARMUP_EXCLUDE_BATCHES`; realtime and streaming modes use
+`WARMUP_EXCLUDE_FRAMES`.
 
 ## Configurable Slurm launcher
 

@@ -213,7 +213,13 @@ def parse_args() -> argparse.Namespace:
         "--warmup-exclude-frames",
         type=int,
         default=2,
-        help="Number of first per-frame model timings to exclude from steady-state FPS.",
+        help="First frames to exclude in realtime/streaming modes.",
+    )
+    parser.add_argument(
+        "--warmup-exclude-batches",
+        type=int,
+        default=1,
+        help="First complete model batches to exclude from batch-mode steady-state FPS.",
     )
     return parser.parse_args()
 
@@ -808,26 +814,61 @@ def write_report(path: Path, report: dict[str, Any], timings: list[dict[str, Any
         writer.writerows(timings)
 
 
-def steady_state_model_summary(base_summary: dict[str, Any], warmup_exclude: int) -> dict[str, Any]:
+def steady_state_model_summary(
+    base_summary: dict[str, Any],
+    warmup_exclude: int,
+    warmup_exclude_batches: int = 1,
+) -> dict[str, Any]:
     timing_report = base_summary.get("timings") or {}
     execution_mode = timing_report.get("model_execution_mode", "frame_parallel")
     per_frame = timing_report.get("per_frame") or []
     usable = [
         row
         for row in per_frame
-        if row.get("status") == "ok" and row.get("total_sec") is not None
+        if str(row.get("status", "")).startswith("ok")
+        and row.get("total_sec") is not None
     ]
-    warmup = max(0, int(warmup_exclude))
-    steady = usable[warmup:] if warmup < len(usable) else []
+    requested_warmup_frames = max(0, int(warmup_exclude))
+    requested_warmup_batches = max(0, int(warmup_exclude_batches))
+    warmup = min(requested_warmup_frames, len(usable))
+    excluded_batches = 0
+
+    if execution_mode == "batch_then_combine" and usable:
+        if requested_warmup_batches > 0:
+            batch_indices = [row.get("smplestx_batch_index") for row in usable]
+            if all(index is not None for index in batch_indices):
+                warmup = sum(
+                    1
+                    for index in batch_indices
+                    if int(index) < requested_warmup_batches
+                )
+                excluded_batches = len(
+                    {
+                        int(index)
+                        for index in batch_indices[:warmup]
+                    }
+                )
+            else:
+                first_batch_size = max(
+                    1, int(usable[0].get("smplestx_batch_size") or 1)
+                )
+                warmup = min(
+                    len(usable), requested_warmup_batches * first_batch_size
+                )
+                excluded_batches = min(
+                    requested_warmup_batches,
+                    (warmup + first_batch_size - 1) // first_batch_size,
+                )
+        else:
+            warmup = 0
+    steady = usable[warmup:]
+    warmup_rows = usable[:warmup]
     frames = len(steady)
     if execution_mode == "batch_then_combine":
-        steady = usable
-        frames = len(steady)
-        warmup = 0
-        seconds = float(timing_report.get("inference_total_sec") or 0.0)
+        seconds = sum(float(row["total_sec"]) for row in steady)
         seconds_definition = (
-            "measured full batch inference and fusion wall time; "
-            "per-frame warmup cannot be separated"
+            "sum of amortized model and combine time after excluding complete "
+            "warm-up batches; excludes model loading and video decoding"
         )
     elif execution_mode == "streaming" and steady:
         end_elapsed = float(steady[-1]["completion_elapsed_sec"])
@@ -841,33 +882,115 @@ def steady_state_model_summary(base_summary: dict[str, Any], warmup_exclude: int
     else:
         seconds = sum(float(row["total_sec"]) for row in steady)
         seconds_definition = "sum of effective per-frame model and fusion time"
-    model_breakdown = {}
-    for model_name in ("smplestx", "wilor", "emoca"):
-        values = [
-            float(row["timings_sec"][model_name])
-            for row in steady
-            if (row.get("timings_sec") or {}).get(model_name) is not None
-        ]
-        model_seconds = sum(values)
-        model_frames = len(values)
-        model_breakdown[model_name] = {
-            "frames": model_frames,
-            "seconds": model_seconds,
-            "seconds_per_frame": model_seconds / model_frames if model_frames else None,
-            "fps": model_frames / model_seconds if model_seconds > 0 else None,
-        }
+
+    def model_breakdown(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        result = {}
+        for model_name in ("smplestx", "wilor", "emoca"):
+            values = [
+                float(row["timings_sec"][model_name])
+                for row in rows
+                if (row.get("timings_sec") or {}).get(model_name) is not None
+            ]
+            model_seconds = sum(values)
+            model_frames = len(values)
+            result[model_name] = {
+                "frames": model_frames,
+                "seconds": model_seconds,
+                "seconds_per_frame": model_seconds / model_frames if model_frames else None,
+                "fps": model_frames / model_seconds if model_seconds > 0 else None,
+            }
+        return result
+
+    warmup_seconds = sum(float(row["total_sec"]) for row in warmup_rows)
+    warmup_breakdown = model_breakdown(warmup_rows)
+    steady_breakdown = model_breakdown(steady)
+    first_batch_total = next(
+        (
+            float(row["smplestx_batch_total_sec"])
+            for row in usable
+            if row.get("smplestx_batch_total_sec") is not None
+        ),
+        None,
+    )
     return {
         "model_execution_mode": execution_mode,
         "seconds_definition": seconds_definition,
-        "warmup_excluded_frames": min(warmup, len(usable)),
+        "warmup": {
+            "definition": (
+                "first complete inference batch"
+                if execution_mode == "batch_then_combine"
+                else "first per-frame inference calls"
+            ),
+            "requested_exclude_frames": requested_warmup_frames,
+            "requested_exclude_batches": requested_warmup_batches,
+            "excluded_batches": excluded_batches,
+            "excluded_frames": len(warmup_rows),
+            "seconds": warmup_seconds,
+            "seconds_per_frame": (
+                warmup_seconds / len(warmup_rows) if warmup_rows else None
+            ),
+            "first_smplestx_batch_total_seconds": first_batch_total,
+            "per_model": warmup_breakdown,
+        },
+        "warmup_excluded_frames": len(warmup_rows),
+        "warmup_excluded_batches": excluded_batches,
         "steady_state_frames": frames,
         "steady_state_model_seconds": seconds,
         "steady_state_model_seconds_per_frame": seconds / frames if frames else None,
         "steady_state_model_fps": frames / seconds if seconds > 0 else None,
+        "normal_working_fps": frames / seconds if seconds > 0 else None,
         "first_frame_model_seconds": float(usable[0]["total_sec"]) if usable else None,
         "second_frame_model_seconds": float(usable[1]["total_sec"]) if len(usable) > 1 else None,
-        "per_model": model_breakdown,
+        "per_model": steady_breakdown,
     }
+
+
+def write_runtime_phase_csv(
+    path: Path,
+    total_seconds: float,
+    total_frames: int,
+    load_summary: dict[str, Any],
+    steady_summary: dict[str, Any],
+) -> None:
+    warmup = steady_summary.get("warmup") or {}
+    rows = [
+        {
+            "phase": "startup_model_load",
+            "seconds": load_summary.get("initial_load_seconds"),
+            "frames": 0,
+            "fps": None,
+            "definition": load_summary.get("definition"),
+        },
+        {
+            "phase": "first_forward_warmup",
+            "seconds": warmup.get("seconds"),
+            "frames": warmup.get("excluded_frames"),
+            "fps": None,
+            "definition": warmup.get("definition"),
+        },
+        {
+            "phase": "normal_working",
+            "seconds": steady_summary.get("steady_state_model_seconds"),
+            "frames": steady_summary.get("steady_state_frames"),
+            "fps": steady_summary.get("normal_working_fps"),
+            "definition": steady_summary.get("seconds_definition"),
+        },
+        {
+            "phase": "cold_end_to_end",
+            "seconds": total_seconds,
+            "frames": total_frames,
+            "fps": total_frames / total_seconds if total_seconds > 0 else None,
+            "definition": "complete one-shot process including startup and final output",
+        },
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["phase", "seconds", "frames", "fps", "definition"],
+        )
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def initial_load_summary(base_summary: dict[str, Any]) -> dict[str, Any]:
@@ -1148,7 +1271,11 @@ def main() -> None:
     initial_load_seconds = float(load_summary["initial_load_seconds"])
     no_load_total = max(0.0, total_seconds - initial_load_seconds)
     no_load_inference = max(0.0, inference_no_render - initial_load_seconds)
-    steady_summary = steady_state_model_summary(base_summary, args.warmup_exclude_frames)
+    steady_summary = steady_state_model_summary(
+        base_summary,
+        args.warmup_exclude_frames,
+        args.warmup_exclude_batches,
+    )
     base_timing_report = base_summary.get("timings") or {}
     fusion_total_seconds = float(base_timing_report.get("fusion_total_sec") or 0.0)
     downstream_seconds_per_frame = sum(
@@ -1185,6 +1312,19 @@ def main() -> None:
             frames / fusion_total_seconds if fusion_total_seconds > 0 else None
         ),
         "steady_state": steady_summary,
+        "runtime_phases": {
+            "startup_model_load": load_summary,
+            "first_forward_warmup": steady_summary.get("warmup"),
+            "normal_working": {
+                "frames": steady_summary.get("steady_state_frames"),
+                "seconds": steady_summary.get("steady_state_model_seconds"),
+                "seconds_per_frame": steady_summary.get(
+                    "steady_state_model_seconds_per_frame"
+                ),
+                "fps": steady_summary.get("normal_working_fps"),
+                "definition": steady_summary.get("seconds_definition"),
+            },
+        },
         "warm_steady_pipeline_estimate": {
             "definition": (
                 f"{steady_summary.get('seconds_definition')}; plus measured "
@@ -1201,8 +1341,17 @@ def main() -> None:
     }
     report_path = output / "runtime" / "integrated_postprocessed_runtime_report.json"
     write_report(report_path, report, timings)
+    phase_csv_path = output / "runtime" / "runtime_phase_summary.csv"
+    write_runtime_phase_csv(
+        phase_csv_path,
+        total_seconds,
+        frames,
+        load_summary,
+        steady_summary,
+    )
     print(json.dumps(report["summary"], indent=2), flush=True)
     print(f"[done] report: {report_path}", flush=True)
+    print(f"[done] runtime phases: {phase_csv_path}", flush=True)
 
 
 if __name__ == "__main__":

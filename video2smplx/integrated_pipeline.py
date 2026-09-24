@@ -781,6 +781,7 @@ def run_integrated_pipeline(
                     metadata={
                         "smplestx_batch_size": body_batch_sizes[index],
                         "smplestx_batch_total_sec": body_batch_totals[index],
+                        "smplestx_batch_index": index // smplestx_batch_size,
                         "combine_sec": combine_seconds,
                     },
                 )

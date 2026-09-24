@@ -36,6 +36,8 @@ SAVE_FINAL_PKLS="${SAVE_FINAL_PKLS:-0}"
 SMPLESTX_BATCH_SIZE="${SMPLESTX_BATCH_SIZE:-8}"
 WILOR_BATCH_SIZE="${WILOR_BATCH_SIZE:-16}"
 EMOCA_BATCH_SIZE="${EMOCA_BATCH_SIZE:-16}"
+WARMUP_EXCLUDE_FRAMES="${WARMUP_EXCLUDE_FRAMES:-2}"
+WARMUP_EXCLUDE_BATCHES="${WARMUP_EXCLUDE_BATCHES:-1}"
 YOLO_KEYPOINTS="${YOLO_KEYPOINTS:-/project/lt200246-mmacma/khtun/video2smplx_integrated_oneprocess_benchmark_prekeypoints/evaluation/precomputed_yolo_pose_keypoints.json}"
 
 if [ ! -s "${VIDEO}" ]; then
@@ -55,6 +57,8 @@ ARGS=(
   --smplestx-batch-size "${SMPLESTX_BATCH_SIZE}"
   --wilor-batch-size "${WILOR_BATCH_SIZE}"
   --emoca-batch-size "${EMOCA_BATCH_SIZE}"
+  --warmup-exclude-frames "${WARMUP_EXCLUDE_FRAMES}"
+  --warmup-exclude-batches "${WARMUP_EXCLUDE_BATCHES}"
   --smplestx-inference-mode
   --smplestx-single-gpu-model
   --fast-io
@@ -103,6 +107,7 @@ echo "[config] execution=${EXECUTION_MODE} inflight=${MAX_INFLIGHT_FRAMES}"
 echo "[config] smplestx_only=${SMPLESTX_ONLY} wilor=${ENABLE_WILOR} emoca=${ENABLE_EMOCA}"
 echo "[config] postprocess=${POSTPROCESS_MODE} smoothing=${ENABLE_SMOOTHING} zero_translation=${ZERO_TRANSLATION}"
 echo "[config] render=${ENABLE_RENDER} save_final_pkls=${SAVE_FINAL_PKLS}"
+echo "[config] warmup_exclude_frames=${WARMUP_EXCLUDE_FRAMES} warmup_exclude_batches=${WARMUP_EXCLUDE_BATCHES}"
 nvidia-smi || true
 
 "${PYTHON[@]}" delivery/source/integrated_postprocessed_pipeline_cli.py "${ARGS[@]}"
