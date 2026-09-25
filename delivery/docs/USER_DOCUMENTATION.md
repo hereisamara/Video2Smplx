@@ -25,8 +25,8 @@ flowchart LR
 There are two server test scripts:
 
 ```text
-delivery/scripts/slurm_test_delivery_integrated_pipeline.sh
-delivery/scripts/slurm_test_delivery_final_postprocessed_pipeline.sh
+delivery/scripts/slurm/testing/test_integrated_pipeline.sh
+delivery/scripts/slurm/testing/test_final_postprocessed_pipeline.sh
 ```
 
 The first script tests only the four delivered base CLI programs. The second
@@ -49,13 +49,13 @@ bounded-streaming, and offline-batch execution. See:
 
 ```text
 delivery/docs/RUN_CONFIGURATION_GUIDE.md
-delivery/scripts/slurm_benchmark_execution_modes.sh
+delivery/scripts/slurm/benchmarks/benchmark_execution_modes.sh
 ```
 
 For runtime/complexity reporting, use:
 
 ```text
-delivery/scripts/slurm_benchmark_delivery_final_postprocessed_pipeline.sh
+delivery/scripts/slurm/benchmarks/benchmark_final_postprocessed_pipeline.sh
 ```
 
 It writes per-stage seconds, seconds/frame, FPS, percent runtime share, corrector

@@ -51,7 +51,7 @@ The hand model checkpoint should exist:
 ## Run
 
 ```bash
-sbatch signlanguage_global_correction_server/slurm_signlanguage_upperbody_correction_gpu.sh
+sbatch delivery/scripts/slurm/training/train_signlanguage_upperbody_correction.sh
 ```
 
 Outputs are written to project storage by default:

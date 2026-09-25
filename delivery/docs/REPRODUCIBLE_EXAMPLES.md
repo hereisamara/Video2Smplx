@@ -82,7 +82,7 @@ four base delivery CLIs remain independent and GT-free.
 ## Server Test With Latest Post-Processing
 
 ```bash
-sbatch delivery/scripts/slurm_test_delivery_final_postprocessed_pipeline.sh
+sbatch delivery/scripts/slurm/testing/test_final_postprocessed_pipeline.sh
 ```
 
 Optional overrides:
@@ -94,7 +94,7 @@ YOLO_MODEL=/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outpu
 GLOBAL_CKPT=outputs_fusion_signlanguage_no_stablized/evaluation/global_correction_model_upper_r1/best_model.pt \
 HAND_CKPT=/project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs/evaluation/hand_correction_model_wrist_fingers_r1/best_model.pt \
 UPPER2D_CKPT=/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/evaluation/2d_guided_upperbody_model_r1/best_model.pt \
-sbatch delivery/scripts/slurm_test_delivery_final_postprocessed_pipeline.sh
+sbatch delivery/scripts/slurm/testing/test_final_postprocessed_pipeline.sh
 ```
 
 Expected final outputs:
@@ -112,7 +112,7 @@ Run one or more sequences through the full final pipeline and collect timing:
 ```bash
 SEQUENCES="SignLanguage_S2 SignLanguage_S3 SignLanguage_S4" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_delivery_final_benchmark \
-sbatch delivery/scripts/slurm_benchmark_delivery_final_postprocessed_pipeline.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_final_postprocessed_pipeline.sh
 ```
 
 Outputs per sequence:
@@ -140,7 +140,7 @@ pipeline once, then adds the global, hand, YOLO-2D, and upper-body correctors.
 SEQUENCES="SignLanguage_S2 SignLanguage_S3 SignLanguage_S4" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_delivery_fair_fps \
 YOLO_MODEL=yolov8x-pose.pt \
-sbatch delivery/scripts/slurm_benchmark_delivery_fair_fps.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_fair_fps.sh
 ```
 
 Main result:
@@ -164,7 +164,7 @@ optimized flags, then applies post-processors inside that process.
 SEQUENCES="SignLanguage_S2 SignLanguage_S3 SignLanguage_S4" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_integrated_oneprocess_benchmark \
 YOLO_MODEL=yolov8x-pose.pt \
-sbatch delivery/scripts/slurm_benchmark_integrated_postprocessed_oneprocess.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_integrated_oneprocess.sh
 ```
 
 Main result:
@@ -183,7 +183,7 @@ fast global+hand correction, and accurate 2D-guided correction.
 SEQUENCES="SignLanguage_S2" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_ablation_samples \
 YOLO_MODEL=yolov8x-pose.pt \
-sbatch delivery/scripts/slurm_generate_ablation_samples.sh
+sbatch delivery/scripts/slurm/samples/generate_ablation_samples.sh
 ```
 
 Default variants:
@@ -221,5 +221,5 @@ VARIANTS="base_no_stab fast_global_hand accurate_2d" \
 SEQUENCES="SignLanguage_S2 SignLanguage_S3" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_ablation_samples \
 YOLO_KEYPOINTS=/project/lt200246-mmacma/khtun/video2smplx_ablation_samples/evaluation/precomputed_yolo_pose_keypoints.json \
-sbatch delivery/scripts/slurm_generate_ablation_samples.sh
+sbatch delivery/scripts/slurm/samples/generate_ablation_samples.sh
 ```

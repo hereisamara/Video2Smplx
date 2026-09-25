@@ -48,7 +48,7 @@ outputs_fusion_signlanguage_no_stablized/SignLanguage_S*/fused_params_model_glob
 ## Run Default
 
 ```bash
-sbatch signlanguage_global_correction_server/slurm_signlanguage_upperbody_transl_correction_gpu.sh
+sbatch delivery/scripts/slurm/training/train_signlanguage_upperbody_translation_correction.sh
 ```
 
 This trains `torso_arms + transl`, then evaluates rotation scales:
@@ -74,25 +74,25 @@ Outputs go to:
 Arms only:
 
 ```bash
-sbatch --export=ALL,TARGET_MODE=arms signlanguage_global_correction_server/slurm_signlanguage_upperbody_transl_correction_gpu.sh
+sbatch --export=ALL,TARGET_MODE=arms delivery/scripts/slurm/training/train_signlanguage_upperbody_translation_correction.sh
 ```
 
 Full upper body:
 
 ```bash
-sbatch --export=ALL,TARGET_MODE=upper_body signlanguage_global_correction_server/slurm_signlanguage_upperbody_transl_correction_gpu.sh
+sbatch --export=ALL,TARGET_MODE=upper_body delivery/scripts/slurm/training/train_signlanguage_upperbody_translation_correction.sh
 ```
 
 Use fewer scale points:
 
 ```bash
-sbatch --export=ALL,TARGET_MODE=torso_arms,ROT_SCALES="0.25 0.50 0.75" signlanguage_global_correction_server/slurm_signlanguage_upperbody_transl_correction_gpu.sh
+sbatch --export=ALL,TARGET_MODE=torso_arms,ROT_SCALES="0.25 0.50 0.75" delivery/scripts/slurm/training/train_signlanguage_upperbody_translation_correction.sh
 ```
 
 Increase/decrease translation emphasis during training:
 
 ```bash
-sbatch --export=ALL,TRANSL_WEIGHT=2.0 signlanguage_global_correction_server/slurm_signlanguage_upperbody_transl_correction_gpu.sh
+sbatch --export=ALL,TRANSL_WEIGHT=2.0 delivery/scripts/slurm/training/train_signlanguage_upperbody_translation_correction.sh
 ```
 
 ## What To Compare

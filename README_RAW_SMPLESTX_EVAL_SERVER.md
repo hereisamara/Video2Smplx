@@ -37,7 +37,7 @@ For an apples-to-apples fusion-ablation baseline, keep the same SMPLest-X settin
 After raw params exist:
 
 ```bash
-sbatch slurm_evaluate_raw_smplestx_signlanguage.sh
+sbatch delivery/scripts/slurm/evaluation/evaluate_raw_smplestx_signlanguage.sh
 ```
 
 Default paths:
@@ -51,7 +51,7 @@ OUTPUT_DIR=outputs_fusion_signlanguage_no_stablized/evaluation/smplx_female_raw_
 Override example:
 
 ```bash
-sbatch --export=ALL,PRED_ROOT=outputs_fusion_signlanguage_raw_smplestx slurm_evaluate_raw_smplestx_signlanguage.sh
+sbatch --export=ALL,PRED_ROOT=outputs_fusion_signlanguage_raw_smplestx delivery/scripts/slurm/evaluation/evaluate_raw_smplestx_signlanguage.sh
 ```
 
 The Slurm log prints a compact `[all-row]` with:

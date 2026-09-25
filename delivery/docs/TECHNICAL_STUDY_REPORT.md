@@ -110,7 +110,7 @@ SMPL-X forward passes, and offscreen rendering.
 Use:
 
 ```bash
-sbatch delivery/scripts/slurm_benchmark_delivery_final_postprocessed_pipeline.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_final_postprocessed_pipeline.sh
 ```
 
 The benchmark reports:
@@ -131,7 +131,7 @@ adds extra cost for the 2D-guided upper-body corrector.
 For a fair FPS comparison, the base render must not be counted twice. Use:
 
 ```bash
-sbatch delivery/scripts/slurm_benchmark_delivery_fair_fps.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_fair_fps.sh
 ```
 
 This produces separate rows for:
@@ -145,7 +145,7 @@ This produces separate rows for:
 For deployment-style throughput, use the one-process benchmark:
 
 ```bash
-sbatch delivery/scripts/slurm_benchmark_integrated_postprocessed_oneprocess.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_integrated_oneprocess.sh
 ```
 
 This is the correct comparison to the earlier optimized `script_fusion.sh`

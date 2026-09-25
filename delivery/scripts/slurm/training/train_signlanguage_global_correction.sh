@@ -18,10 +18,10 @@ conda activate video2smplx_shared310
 cd /home/khtun/video2simplx/Video2SmplxPy10/Video2Smplx
 
 PYTHON="conda run --no-capture-output -n video2smplx_shared310 python"
-PRED_ROOT="outputs_fusion_signlanguage_no_stablized"
+PRED_ROOT="${PRED_ROOT:-outputs_fusion_signlanguage_no_stablized}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${PRED_ROOT}}"
-PKG_DIR="signlanguage_global_correction_server"
-MODEL_PATH="${PKG_DIR}/models/SMPLX_FEMALE.npz"
+PKG_DIR="${PKG_DIR:-signlanguage_global_correction_server}"
+MODEL_PATH="${MODEL_PATH:-${PKG_DIR}/models/SMPLX_FEMALE.npz}"
 
 ORACLE_SUBDIR="fused_params_oracle_upper_body_only_frame"
 MODEL_SUBDIR="fused_params_model_global_corrected"

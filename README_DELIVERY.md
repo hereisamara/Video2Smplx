@@ -152,7 +152,7 @@ Generate subjective sample outputs for each step:
 SEQUENCES="SignLanguage_S2" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_ablation_samples \
 YOLO_MODEL=yolov8x-pose.pt \
-sbatch delivery/scripts/slurm_generate_ablation_samples.sh
+sbatch delivery/scripts/slurm/samples/generate_ablation_samples.sh
 ```
 
 Default sample variants:
@@ -345,7 +345,7 @@ Precompute YOLO keypoints once for repeatable accurate-mode timing:
 SEQUENCES="SignLanguage_S2 SignLanguage_S3 SignLanguage_S4" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_keypoints \
 YOLO_MODEL=yolov8x-pose.pt \
-sbatch delivery/scripts/slurm_precompute_signlanguage_yolo_keypoints.sh
+sbatch delivery/scripts/slurm/preprocessing/precompute_signlanguage_yolo_keypoints.sh
 ```
 
 Run the final benchmark:
@@ -354,7 +354,7 @@ Run the final benchmark:
 SEQUENCES="SignLanguage_S2 SignLanguage_S3 SignLanguage_S4" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_integrated_oneprocess_benchmark \
 YOLO_KEYPOINTS=/project/lt200246-mmacma/khtun/video2smplx_keypoints/evaluation/precomputed_yolo_pose_keypoints.json \
-sbatch delivery/scripts/slurm_benchmark_integrated_postprocessed_oneprocess.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_integrated_oneprocess.sh
 ```
 
 ## 10. Clean Delivery Set

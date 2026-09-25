@@ -187,7 +187,7 @@ POSTPROCESS_MODE=accurate \
 ENABLE_SMOOTHING=1 \
 ZERO_TRANSLATION=1 \
 ENABLE_RENDER=0 \
-sbatch delivery/scripts/slurm_run_configurable_pipeline.sh
+sbatch delivery/scripts/slurm/pipeline/run_configurable_pipeline.sh
 ```
 
 SMPLest-X-only example:
@@ -196,5 +196,5 @@ SMPLest-X-only example:
 SEQUENCE=SignLanguage_S2 \
 SMPLESTX_ONLY=1 \
 EXECUTION_MODE=batch \
-sbatch delivery/scripts/slurm_run_configurable_pipeline.sh
+sbatch delivery/scripts/slurm/pipeline/run_configurable_pipeline.sh
 ```

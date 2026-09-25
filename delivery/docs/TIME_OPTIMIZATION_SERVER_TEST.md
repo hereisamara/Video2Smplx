@@ -19,7 +19,7 @@ SEQUENCES="SignLanguage_S2" \
 REPEATS=1 \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_time_optimization_benchmark \
 YOLO_KEYPOINTS=/project/lt200246-mmacma/khtun/video2smplx_integrated_oneprocess_benchmark_prekeypoints/evaluation/precomputed_yolo_pose_keypoints.json \
-sbatch delivery/scripts/slurm_benchmark_time_optimized_pipeline.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_time_optimized_pipeline.sh
 ```
 
 Monitor it with:
@@ -39,7 +39,7 @@ SEQUENCES="SignLanguage_S2 SignLanguage_S3 SignLanguage_S4" \
 REPEATS=2 \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_time_optimization_benchmark_s2_s3_s4 \
 YOLO_KEYPOINTS=/project/lt200246-mmacma/khtun/video2smplx_integrated_oneprocess_benchmark_prekeypoints/evaluation/precomputed_yolo_pose_keypoints.json \
-sbatch delivery/scripts/slurm_benchmark_time_optimized_pipeline.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_time_optimized_pipeline.sh
 ```
 
 ## Results
@@ -84,7 +84,7 @@ SEQUENCES="SignLanguage_S2" \
 REPEATS=1 \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_10fps_detector_stride \
 YOLO_KEYPOINTS=/project/lt200246-mmacma/khtun/video2smplx_integrated_oneprocess_benchmark_prekeypoints/evaluation/precomputed_yolo_pose_keypoints.json \
-sbatch delivery/scripts/slurm_benchmark_10fps_detector_stride.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_10fps_detector_stride.sh
 ```
 
 The variants are `baseline`, `face5`, `hand3_face5`, and `hand5_face5`. The

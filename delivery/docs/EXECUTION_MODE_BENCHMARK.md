@@ -20,12 +20,12 @@ remain bounded to avoid exhausting GPU memory.
 ```bash
 git pull origin delivery-readme-video-comparison
 
-bash -n delivery/scripts/slurm_benchmark_execution_modes.sh
+bash -n delivery/scripts/slurm/benchmarks/benchmark_execution_modes.sh
 
 SEQUENCES="SignLanguage_S2" \
 REPEATS=1 \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_execution_mode_benchmark \
-sbatch delivery/scripts/slurm_benchmark_execution_modes.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_execution_modes.sh
 ```
 
 Use three repeats for reportable numbers:
@@ -34,7 +34,7 @@ Use three repeats for reportable numbers:
 SEQUENCES="SignLanguage_S2 SignLanguage_S3 SignLanguage_S4" \
 REPEATS=3 \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_execution_mode_benchmark_r3 \
-sbatch delivery/scripts/slurm_benchmark_execution_modes.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_execution_modes.sh
 ```
 
 ## Results

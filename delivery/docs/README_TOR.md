@@ -23,8 +23,9 @@ reproduction.
 | Model setup and download instructions | Provided | `delivery/docs/MODEL_SETUP.md` |
 | Reproducible examples | Provided | `delivery/docs/REPRODUCIBLE_EXAMPLES.md` |
 | Sample sign-language video and processing results | Provided / generated | `delivery/sample/` and server ablation sample outputs |
-| Ablation sample outputs for requirement control | Provided by script | `delivery/scripts/slurm_generate_ablation_samples.sh` |
-| Runtime/FPS measurement | Provided by script | `delivery/scripts/slurm_benchmark_integrated_postprocessed_oneprocess.sh` |
+| Ablation sample outputs for requirement control | Provided by script | `delivery/scripts/slurm/samples/generate_ablation_samples.sh` |
+| Runtime/FPS measurement | Provided by script | `delivery/scripts/slurm/benchmarks/benchmark_integrated_oneprocess.sh` |
+| Organized Slurm jobs and server guide | Provided | `delivery/scripts/slurm/README.md` |
 | Document set | Build script provided | `delivery/scripts/build_document_set.sh` |
 | Flash-drive set | Copy script provided | `delivery/scripts/prepare_flash_drive_set.sh` |
 
@@ -184,7 +185,7 @@ For TOR review, generate comparable sample outputs for each requirement setting:
 SEQUENCES="SignLanguage_S2" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_ablation_samples \
 YOLO_MODEL=yolov8x-pose.pt \
-sbatch delivery/scripts/slurm_generate_ablation_samples.sh
+sbatch delivery/scripts/slurm/samples/generate_ablation_samples.sh
 ```
 
 Default ablation variants:
@@ -224,7 +225,7 @@ runtime, precompute YOLO keypoints once and reuse the JSON.
 SEQUENCES="SignLanguage_S2 SignLanguage_S3 SignLanguage_S4" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_keypoints \
 YOLO_MODEL=yolov8x-pose.pt \
-sbatch delivery/scripts/slurm_precompute_signlanguage_yolo_keypoints.sh
+sbatch delivery/scripts/slurm/preprocessing/precompute_signlanguage_yolo_keypoints.sh
 ```
 
 Expected output:
@@ -241,7 +242,7 @@ Use the one-process benchmark for fair runtime reporting:
 SEQUENCES="SignLanguage_S2 SignLanguage_S3 SignLanguage_S4" \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_integrated_oneprocess_benchmark \
 YOLO_KEYPOINTS=/project/lt200246-mmacma/khtun/video2smplx_keypoints/evaluation/precomputed_yolo_pose_keypoints.json \
-sbatch delivery/scripts/slurm_benchmark_integrated_postprocessed_oneprocess.sh
+sbatch delivery/scripts/slurm/benchmarks/benchmark_integrated_oneprocess.sh
 ```
 
 Main output:

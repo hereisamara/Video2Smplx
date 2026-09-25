@@ -97,7 +97,7 @@ baseline. This skips WiLoR, EMOCA, fusion, and rendering, and writes only:
 On the LANTA server, run the Slurm array launcher:
 
 ```bash
-sbatch slurm_signlanguage_smplestx_only_gpu.sh
+sbatch delivery/scripts/slurm/pipeline/run_signlanguage_smplestx_only_array.sh
 ```
 
 By default, it writes outputs and logs under project storage to avoid `/home`
@@ -114,7 +114,7 @@ Evaluate the generated raw SMPLest-X PKLs:
 PRED_ROOT=/project/lt200246-mmacma/khtun/outputs_smplestx_only_signlanguage \
 PARAMS_SUBDIR=smplestx_params \
 OUTPUT_DIR=/project/lt200246-mmacma/khtun/outputs_smplestx_only_signlanguage/evaluation/smplx_female_raw_smplestx \
-sbatch slurm_evaluate_raw_smplestx_signlanguage.sh
+sbatch delivery/scripts/slurm/evaluation/evaluate_raw_smplestx_signlanguage.sh
 ```
 
 ### DexAvatar-Style Sign-Language Comparison
