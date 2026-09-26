@@ -43,7 +43,7 @@ echo "[check] sequences: ${SEQUENCES}"
 echo "[check] sample count: ${SAMPLE_COUNT}"
 echo "[check] seed: ${RANDOM_SEED}"
 
-time ${PYTHON} render_signlanguage_before_after_mesh_gif.py \
+time ${PYTHON} -m tools.visualization.render_signlanguage_before_after_mesh_gif \
   --video-dir "${VIDEO_DIR}" \
   --annotation-dir "${ANNOTATION_DIR}" \
   --before-root "${BEFORE_ROOT}" \

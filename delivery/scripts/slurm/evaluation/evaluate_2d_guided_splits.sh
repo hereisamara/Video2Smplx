@@ -32,7 +32,7 @@ echo "[check] splits: ${SPLITS}"
 echo "[check] eval out: ${EVAL_OUT}"
 nvidia-smi || true
 
-${PYTHON} evaluate_signlanguage_2d_guided_splits.py \
+${PYTHON} -m tools.evaluation.evaluate_signlanguage_2d_guided_splits \
   --dataset "${DATASET_PATH}" \
   --pred-root "${OUTPUT_ROOT}" \
   --params-subdirs ${PARAMS_SUBDIRS} \

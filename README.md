@@ -119,7 +119,7 @@ sbatch delivery/scripts/slurm/evaluation/evaluate_raw_smplestx_signlanguage.sh
 
 ### DexAvatar-Style Sign-Language Comparison
 
-`evaluate_signlanguage_geometry.py` also reports DexAvatar-style regional raw
+`tools/evaluation/evaluate_signlanguage_geometry.py` also reports DexAvatar-style regional raw
 vertex-to-vertex fields:
 
 ```text
@@ -135,7 +135,7 @@ comparison format with sign-language reconstruction papers such as DexAvatar.
 Print the comparison table from any `geometry_summary.csv`:
 
 ```bash
-python compare_dexavatar_style_results.py \
+python -m tools.evaluation.compare_dexavatar_style_results \
   /path/to/evaluation/geometry_summary.csv \
   --label "Ours corrected on SignLanguage"
 ```
@@ -144,71 +144,24 @@ python compare_dexavatar_style_results.py \
 
 ## Directory Structure
 
+```text
+Video2Smplx/
+├── video2smplx/             Integrated runtime package
+├── tools/                   Post-processing, evaluation, and visualization CLIs
+├── delivery/                Customer-facing source, documentation, and samples
+├── research/                Training and non-adopted experiments
+├── docs/                    Project documentation and media
+├── requirements/            Optional dependency groups
+├── tests/                   Automated tests
+├── artifacts/               Generated outputs and delivery packages (ignored)
+├── tmp/                     Local backups and samples (ignored)
+├── SMPLest-X-Inference/     Body estimator dependency
+├── WiLoR-Inference/         Hand estimator dependency
+└── EMOCA-Inference/         Face estimator dependency
 ```
-MoE/
-├── pipeline.py                    <- Legacy file-based orchestrator
-├── smplestx_wilor_emoca_fuse.py   <- Standalone 3-way fusion script
-├── zero_filter_render.py          <- Zero transl + SG smooth + pyrender video
-├── memo.txt                       <- Developer notes / quick commands
-│
-├── video2smplx/                   <- Integrated one-process pipeline package
-│   ├── integrated_pipeline.py     <- Loads all runners once and fuses per frame
-│   ├── frames.py                  <- In-process frame extraction/listing
-│   ├── fusion.py                  <- Pure fusion, validation, vector rebuilds
-│   └── runners/
-│       ├── smplestx.py            <- SMPLest-X in-process runner
-│       ├── wilor.py               <- WiLoR in-process runner
-│       └── emoca.py               <- EMOCA in-process runner
-│
-├── demo/
-│   ├── input/                     <- Extracted frames (shared, PERSISTENT)
-│   ├── result_params_unified/     <- WiLoR output params
-│   │   └── params/                <- Per-frame .pkl (right/left hand pose)
-│   └── output/                    <- Final rendered output
-│
-├── SMPLest-X-Inference/           <- Full-body estimation sub-project
-│   ├── main/inference.py          <- SMPLest-X entry point
-│   ├── models/                    <- ViT-H + TransformerDecoderHead
-│   ├── human_models/              <- SMPL-X / SMPL body model files
-│   ├── pretrained_models/
-│   │   ├── yolov8x.pt             <- YOLOv8x person detector
-│   │   └── smplest_x_h/
-│   │       ├── smplest_x_h.pth.tar  <- SMPLest-X-H weights (7.7 GB)
-│   │       └── config_base.py
-│   └── demo/
-│       ├── *.mp4                  <- Input videos
-│       └── output_params/<name>/ <- Per-frame .pkl output
-│
-├── WiLoR-Inference/               <- Hand estimation sub-project
-│   ├── demo_params_unified.py     <- WiLoR entry point
-│   ├── pretrained_models/
-│   │   ├── wilor_final.ckpt       <- WiLoR weights (2.4 GB)
-│   │   ├── detector.pt            <- YOLO hand detector (51 MB)
-│   │   ├── model_config.yaml
-│   │   └── dataset_config.yaml
-│   ├── mano_data/
-│   │   ├── MANO_RIGHT.pkl         <- MANO hand model (~3.7 MB)
-│   │   └── mano_mean_params.npz
-│   └── wilor/                     <- WiLoR source package
-│
-└── EMOCA-Inference/               <- Face estimation sub-project
-    ├── gdl_apps/EMOCA/demos/
-    │   └── visualize3.py          <- EMOCA entry point used by pipeline
-    ├── assets/
-    │   ├── EMOCA/models/
-    │   │   └── EMOCA_v2_lr_mse_20/  <- EMOCA checkpoint (~395 MB)
-    │   ├── FLAME/geometry/
-    │   │   └── generic_model.pkl    <- FLAME face model (51 MB)
-    │   ├── DECA/data/
-    │   │   └── deca_model.tar       <- DECA pretrained weights (415 MB)
-    │   └── FaceRecognition/
-    │       └── resnet50_ft_weight.pkl <- Face recognition weights (158 MB)
-    ├── setup_env.sh               <- Legacy EMOCA-only Python 3.8 setup
-    ├── setup_env_shared_py310.sh  <- Shared Python 3.10 setup script
-    ├── requirements38.txt
-    ├── requirements310.txt        <- Shared environment pip requirements
-    └── test_shared_env.py         <- Shared environment smoke test
-```
+
+See [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) for the complete
+layout and the delivery/research boundary.
 
 ---
 

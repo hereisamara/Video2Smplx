@@ -37,7 +37,7 @@ if [ -z "${FIRST_PKL}" ]; then
   exit 2
 fi
 
-time ${PYTHON} "${PKG_DIR}/evaluate_signlanguage_geometry.py" \
+time ${PYTHON} -m tools.evaluation.evaluate_signlanguage_geometry \
   --pred-root "${PRED_ROOT}" \
   --params-subdir "${PARAMS_SUBDIR}" \
   --model-path "${MODEL_PATH}" \

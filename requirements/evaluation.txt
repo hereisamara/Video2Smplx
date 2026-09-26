@@ -1,0 +1,3 @@
+# Independent 2D pose detector and video I/O for evaluate_reprojection.py.
+# MediaPipe 0.10.21 retains the Python API used by the evaluator.
+mediapipe==0.10.21

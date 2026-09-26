@@ -100,7 +100,7 @@ if [ ! -d "${RUN_ROOT}/${SEQUENCE}" ]; then
 fi
 
 echo "[5/8] Apply global_orient + transl corrector"
-time ${PYTHON} apply_signlanguage_global_correction.py \
+time ${PYTHON} -m tools.postprocessing.apply_signlanguage_global_correction \
   --pred-root "${RUN_ROOT}" \
   --params-subdir base_fusion/fused_params \
   --output-root "${RUN_ROOT}" \
@@ -110,7 +110,7 @@ time ${PYTHON} apply_signlanguage_global_correction.py \
   --device cuda
 
 echo "[6/8] Apply hand wrist/finger corrector"
-time ${PYTHON} apply_signlanguage_hand_correction.py \
+time ${PYTHON} -m tools.postprocessing.apply_signlanguage_hand_correction \
   --pred-root "${RUN_ROOT}" \
   --params-subdir fused_params_model_global_corrected \
   --output-root "${RUN_ROOT}" \
@@ -121,7 +121,7 @@ time ${PYTHON} apply_signlanguage_hand_correction.py \
 
 if [ ! -s "${YOLO_JSON}" ]; then
   echo "[7/8] Extract YOLO pose keypoints"
-  time ${PYTHON} extract_signlanguage_yolo_pose_keypoints.py \
+  time ${PYTHON} -m tools.preprocessing.extract_signlanguage_yolo_pose_keypoints \
     --video-dir "${VIDEO_DIR}" \
     --output "${YOLO_JSON}" \
     --model "${YOLO_MODEL}" \
@@ -134,7 +134,7 @@ else
 fi
 
 echo "[8/8] Apply 2D-guided upper-body corrector and render final output"
-time ${PYTHON} apply_signlanguage_2d_guided_upperbody_corrector.py \
+time ${PYTHON} -m tools.postprocessing.apply_signlanguage_2d_guided_upperbody_corrector \
   --pred-root "${RUN_ROOT}" \
   --params-subdir fused_params_model_global_hand_corrected \
   --output-root "${RUN_ROOT}" \

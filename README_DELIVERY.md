@@ -30,7 +30,7 @@ integrated final pipeline with optional post-processing correctors.
 | Video output comparison README | `README_VIDEO_OUTPUT_COMPARISON.md` and `delivery/docs/VIDEO_OUTPUT_COMPARISON.md` |
 | Sample input and result videos | `delivery/sample/` |
 | Objective result tables | `delivery/results/` |
-| Supporting post-processing and evaluation scripts | root-level `apply_signlanguage_*.py`, `build_signlanguage_*.py`, `train_signlanguage_*.py`, `evaluate_signlanguage_*.py`, and `extract_signlanguage_yolo_pose_keypoints.py` |
+| Supporting post-processing and evaluation scripts | `tools/postprocessing/`, `tools/evaluation/`, `tools/preprocessing/`, and `video2smplx/postprocessing/` |
 
 ## 2. Pipeline Architecture
 
@@ -111,18 +111,23 @@ python delivery/source/integrated_postprocessed_pipeline_cli.py \
   --parallel-models
 ```
 
-Supporting training, application, evaluation, and visualization scripts are
-kept at the repository root because the server experiments use them directly:
+The delivery keeps only inference, evaluation, and visualization programs in
+the operational source tree:
 
 | Purpose | Files |
 | --- | --- |
-| Geometry evaluation | `evaluate_signlanguage_geometry.py`, `evaluate_signlanguage_ablation.py`, `evaluate_signlanguage_2d_guided_splits.py` |
-| YOLO 2D keypoint extraction | `extract_signlanguage_yolo_pose_keypoints.py` |
-| Global corrector | `signlanguage_global_correction.py`, `build_signlanguage_global_correction_dataset.py`, `train_signlanguage_global_correction.py`, `apply_signlanguage_global_correction.py` |
-| Hand corrector | `build_signlanguage_hand_correction_dataset.py`, `train_signlanguage_hand_correction.py`, `apply_signlanguage_hand_correction.py` |
-| 2D-guided upper-body corrector | `build_signlanguage_2d_guided_upperbody_dataset.py`, `train_signlanguage_2d_guided_upperbody_corrector.py`, `apply_signlanguage_2d_guided_upperbody_corrector.py` |
-| Older upper-body ablations | `build_signlanguage_upperbody_correction_dataset.py`, `train_signlanguage_upperbody_correction.py`, `apply_signlanguage_upperbody_correction.py`, `build_signlanguage_upperbody_transl_correction_dataset.py`, `train_signlanguage_upperbody_transl_correction.py`, `apply_signlanguage_upperbody_transl_correction.py` |
-| Qualitative rendering helpers | `render_signlanguage_before_after_mesh_gif.py`, `render_signlanguage_gt_pred_gif.py`, `render_signlanguage_gt_pred_mesh_gif.py`, `render_signlanguage_gt_pred_hands_gif.py` |
+| Geometry evaluation | `tools/evaluation/evaluate_signlanguage_geometry.py`, `tools/evaluation/evaluate_signlanguage_ablation.py`, `tools/evaluation/evaluate_signlanguage_2d_guided_splits.py` |
+| YOLO 2D keypoint extraction | `tools/preprocessing/extract_signlanguage_yolo_pose_keypoints.py` |
+| Global corrector | `video2smplx/postprocessing/signlanguage.py`, `tools/postprocessing/apply_signlanguage_global_correction.py` |
+| Hand corrector | `tools/postprocessing/apply_signlanguage_hand_correction.py` |
+| 2D-guided upper-body corrector | `tools/postprocessing/apply_signlanguage_2d_guided_upperbody_corrector.py` |
+| Shared GT-free correction runtime | `video2smplx/postprocessing/` |
+| Qualitative rendering helpers | `tools/visualization/` |
+
+Dataset builders, model trainers, GT oracle tools, training Slurm jobs, and
+rejected upper-body experiments are archived under
+`research/signlanguage_training/`. They are marked research-only and are not
+copied into the document set or flash-drive delivery.
 
 ## 4. Configurations And Ablations
 
@@ -369,14 +374,14 @@ delivery/scripts/
 delivery/docs/
 delivery/results/
 delivery/sample/
-apply_signlanguage_*.py
-build_signlanguage_*.py
-train_signlanguage_*.py
-evaluate_signlanguage_*.py
-extract_signlanguage_yolo_pose_keypoints.py
-render_signlanguage_*.py
+tools/postprocessing/
+tools/evaluation/
+tools/preprocessing/
+tools/visualization/
+video2smplx/postprocessing/
 ```
 
-Do not include temporary server logs, temporary archives, partial experiment
-folders, `.DS_Store`, local caches, or large model checkpoints unless the
-contract explicitly requires physical media to include model weights.
+Do not include `research/signlanguage_training/`, temporary server logs,
+temporary archives, partial experiment folders, `.DS_Store`, local caches, or
+large model checkpoints unless the contract explicitly requires physical media
+to include model weights.

@@ -37,7 +37,7 @@ echo "[check] model path: ${MODEL_PATH}"
 echo "[check] output dir: ${OUTPUT_DIR}"
 echo "[check] sequence selector: ${SEQUENCES}"
 
-time ${PYTHON} evaluate_signify_geometry.py \
+time ${PYTHON} -m tools.evaluation.evaluate_signify_geometry \
   --frames-root "${FRAMES_ROOT}" \
   --gt-root "${GT_ROOT}" \
   --pred-root "${PRED_ROOT}" \

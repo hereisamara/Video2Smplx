@@ -130,7 +130,7 @@ for SEQUENCE in ${SEQUENCES}; do
       --gender neutral
 
   run_step "${SEQUENCE}" "correct_global_orient_transl" \
-    "${PYTHON[@]}" apply_signlanguage_global_correction.py \
+    "${PYTHON[@]}" -m tools.postprocessing.apply_signlanguage_global_correction \
       --pred-root "${RUN_ROOT}" \
       --params-subdir base_fusion/fused_params \
       --output-root "${RUN_ROOT}" \
@@ -140,7 +140,7 @@ for SEQUENCE in ${SEQUENCES}; do
       --device cuda
 
   run_step "${SEQUENCE}" "correct_hand_wrist_fingers" \
-    "${PYTHON[@]}" apply_signlanguage_hand_correction.py \
+    "${PYTHON[@]}" -m tools.postprocessing.apply_signlanguage_hand_correction \
       --pred-root "${RUN_ROOT}" \
       --params-subdir fused_params_model_global_corrected \
       --output-root "${RUN_ROOT}" \
@@ -150,7 +150,7 @@ for SEQUENCE in ${SEQUENCES}; do
       --device cuda
 
   run_step "${SEQUENCE}" "extract_yolo_pose_2d" \
-    "${PYTHON[@]}" extract_signlanguage_yolo_pose_keypoints.py \
+    "${PYTHON[@]}" -m tools.preprocessing.extract_signlanguage_yolo_pose_keypoints \
       --video-dir "${VIDEO_DIR}" \
       --output "${YOLO_JSON}" \
       --model "${YOLO_MODEL}" \
@@ -160,7 +160,7 @@ for SEQUENCE in ${SEQUENCES}; do
       --conf 0.25
 
   run_step "${SEQUENCE}" "correct_2d_guided_upper_body" \
-    "${PYTHON[@]}" apply_signlanguage_2d_guided_upperbody_corrector.py \
+    "${PYTHON[@]}" -m tools.postprocessing.apply_signlanguage_2d_guided_upperbody_corrector \
       --pred-root "${RUN_ROOT}" \
       --params-subdir fused_params_model_global_hand_corrected \
       --output-root "${RUN_ROOT}" \

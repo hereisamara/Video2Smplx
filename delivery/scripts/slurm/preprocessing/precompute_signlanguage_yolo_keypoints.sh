@@ -42,7 +42,7 @@ fi
 
 mkdir -p "$(dirname "${YOLO_OUTPUT}")"
 
-time "${PYTHON[@]}" extract_signlanguage_yolo_pose_keypoints.py \
+time "${PYTHON[@]}" -m tools.preprocessing.extract_signlanguage_yolo_pose_keypoints \
   --video-dir "${VIDEO_DIR}" \
   --output "${YOLO_OUTPUT}" \
   --model "${YOLO_MODEL}" \

@@ -38,7 +38,7 @@ echo "[check] splits: ${SPLITS}"
 echo "[check] baseline: ${BASELINE}"
 nvidia-smi || true
 
-time ${PYTHON} evaluate_signlanguage_ablation.py \
+time ${PYTHON} -m tools.evaluation.evaluate_signlanguage_ablation \
   --dataset "${DATASET_PATH}" \
   --model-path "${MODEL_PATH}" \
   --output-root "${OUTPUT_ROOT}" \

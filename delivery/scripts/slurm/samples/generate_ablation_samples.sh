@@ -72,7 +72,7 @@ if [ "${needs_accurate}" -eq 1 ] && [ ! -s "${YOLO_KEYPOINTS}" ]; then
   fi
   echo "[precompute] YOLO keypoints -> ${YOLO_KEYPOINTS}"
   mkdir -p "$(dirname "${YOLO_KEYPOINTS}")"
-  "${PYTHON[@]}" extract_signlanguage_yolo_pose_keypoints.py \
+  "${PYTHON[@]}" -m tools.preprocessing.extract_signlanguage_yolo_pose_keypoints \
     --video-dir "${VIDEO_DIR}" \
     --output "${YOLO_KEYPOINTS}" \
     --model "${YOLO_MODEL}" \
@@ -175,7 +175,7 @@ for SEQUENCE in ${SEQUENCES}; do
 
     if [ "${EVALUATE}" = "1" ]; then
       EVAL_DIR="${RUN_ROOT}/evaluation/${VARIANT}/${SEQUENCE}"
-      "${PYTHON[@]}" evaluate_signlanguage_geometry.py \
+      "${PYTHON[@]}" -m tools.evaluation.evaluate_signlanguage_geometry \
         --pred-root "${RUN_ROOT}/${VARIANT}" \
         --params-subdir "${FINAL_NAME}/rendered/params" \
         --model-path "${EVAL_MODEL}" \

@@ -82,5 +82,5 @@ Expected server locations from the experiments:
 /project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/
 ```
 
-Use the matching `apply_signlanguage_*correction.py` scripts when reproducing
-the corrected benchmark pipeline.
+Use the matching programs under `tools/postprocessing/` when reproducing the
+corrected benchmark pipeline.

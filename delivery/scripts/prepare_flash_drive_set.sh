@@ -11,11 +11,12 @@ DELIVERY_DIR="${ROOT_DIR}/delivery"
 TARGET="$1/Video2Smplx_delivery"
 
 mkdir -p "${TARGET}"
-cp -R "${DELIVERY_DIR}/docs" "${TARGET}/docs"
-cp -R "${DELIVERY_DIR}/source" "${TARGET}/source"
-cp -R "${DELIVERY_DIR}/scripts" "${TARGET}/scripts"
-cp -R "${DELIVERY_DIR}/sample" "${TARGET}/sample"
-cp -R "${DELIVERY_DIR}/results" "${TARGET}/results"
+cp -R "${DELIVERY_DIR}" "${TARGET}/delivery"
+cp -R "${ROOT_DIR}/tools" "${TARGET}/tools"
+cp -R "${ROOT_DIR}/video2smplx" "${TARGET}/video2smplx"
+cp -R "${ROOT_DIR}/requirements" "${TARGET}/requirements"
+cp "${ROOT_DIR}/zero_filter_render.py" "${TARGET}/zero_filter_render.py"
+cp "${ROOT_DIR}/smplestx_wilor_emoca_fuse.py" "${TARGET}/smplestx_wilor_emoca_fuse.py"
 cp "${ROOT_DIR}/README_DELIVERY.md" "${TARGET}/README_DELIVERY.md"
 cp "${ROOT_DIR}/README_TOR.md" "${TARGET}/README_TOR.md"
 cp "${ROOT_DIR}/README_VIDEO_OUTPUT_COMPARISON.md" "${TARGET}/README_VIDEO_OUTPUT_COMPARISON.md"
@@ -23,10 +24,6 @@ cp "${ROOT_DIR}/README_VIDEO_OUTPUT_COMPARISON.md" "${TARGET}/README_VIDEO_OUTPU
 if [ -d "${ROOT_DIR}/docs/media/ablation_s2" ]; then
   mkdir -p "${TARGET}/docs/media"
   cp -R "${ROOT_DIR}/docs/media/ablation_s2" "${TARGET}/docs/media/ablation_s2"
-fi
-
-if [ -d "${DELIVERY_DIR}/final_outputs" ]; then
-  cp -R "${DELIVERY_DIR}/final_outputs" "${TARGET}/final_outputs"
 fi
 
 echo "[done] flash-drive set copied to: ${TARGET}"

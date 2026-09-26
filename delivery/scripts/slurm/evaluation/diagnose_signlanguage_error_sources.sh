@@ -40,7 +40,7 @@ echo "[check] max frames: ${MAX_FRAMES}"
 echo "[check] groups: ${GROUPS}"
 nvidia-smi || true
 
-time ${PYTHON} diagnose_signlanguage_error_sources.py \
+time ${PYTHON} -m tools.diagnostics.diagnose_signlanguage_error_sources \
   --pred-root "${PRED_ROOT}" \
   --params-subdir "${PARAMS_SUBDIR}" \
   --model-path "${MODEL_PATH}" \

@@ -25,12 +25,12 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from apply_signlanguage_2d_guided_upperbody_corrector import (  # noqa: E402
+from tools.postprocessing.apply_signlanguage_2d_guided_upperbody_corrector import (  # noqa: E402
     apply_delta as apply_upper_delta,
     normalize_indices,
 )
-from apply_signlanguage_hand_correction import apply_hand_delta  # noqa: E402
-from build_signlanguage_2d_guided_upperbody_dataset import (  # noqa: E402
+from tools.postprocessing.apply_signlanguage_hand_correction import apply_hand_delta  # noqa: E402
+from video2smplx.postprocessing.guided_features import (  # noqa: E402
     guided_feature,
     get_yolo_frame,
     load_yolo,
@@ -40,17 +40,17 @@ from delivery.source.combine_smooth_render_cli import (  # noqa: E402
     first_person,
     make_side_by_side,
 )
-from evaluate_signlanguage_geometry import NumpySMPLX  # noqa: E402
-from extract_signlanguage_yolo_pose_keypoints import select_person  # noqa: E402
-from signlanguage_global_correction import (  # noqa: E402
+from tools.evaluation.evaluate_signlanguage_geometry import NumpySMPLX  # noqa: E402
+from tools.preprocessing.extract_signlanguage_yolo_pose_keypoints import select_person  # noqa: E402
+from video2smplx.postprocessing.signlanguage import (  # noqa: E402
     apply_predicted_correction,
     base_feature,
     copy_person,
     frame_number,
     write_person,
 )
-from train_signlanguage_global_correction import build_model, import_torch  # noqa: E402
-from transform_signlanguage_feature_ablation_dataset import transform_features  # noqa: E402
+from video2smplx.postprocessing.feature_ablation import transform_features  # noqa: E402
+from video2smplx.postprocessing.model import build_model, import_torch  # noqa: E402
 from video2smplx.integrated_pipeline import (  # noqa: E402
     DEFAULT_SMPLX_MODEL,
     EMOCA_DIR,

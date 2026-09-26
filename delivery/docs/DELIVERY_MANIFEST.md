@@ -37,8 +37,13 @@ and sample results needed to run and verify the sign-language SMPL-X pipeline.
 | Time-optimization server guide | `delivery/docs/TIME_OPTIMIZATION_SERVER_TEST.md` |
 | Ablation sample output generator | `delivery/scripts/slurm/samples/generate_ablation_samples.sh` |
 | Included ablation video comparison media | `docs/media/ablation_s2/` |
-| Supporting SignLanguage post-processing scripts | root-level `apply_signlanguage_*.py`, `build_signlanguage_*.py`, `train_signlanguage_*.py` |
-| Supporting SignLanguage evaluation scripts | root-level `evaluate_signlanguage_*.py` and `extract_signlanguage_yolo_pose_keypoints.py` |
+| Supporting SignLanguage post-processing scripts | `tools/postprocessing/` and `video2smplx/postprocessing/` |
+| Supporting SignLanguage evaluation scripts | `tools/evaluation/`, `tools/diagnostics/`, and `tools/preprocessing/` |
+
+Training dataset builders, trainers, GT oracle programs, training Slurm jobs,
+and rejected upper-body experiments are retained under
+`research/signlanguage_training/` for internal reproducibility. They are
+explicitly outside the delivery set.
 
 ## Final Output Folder Contract
 

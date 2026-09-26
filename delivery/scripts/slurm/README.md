@@ -78,24 +78,6 @@ YOLO_MODEL=yolov8x-pose.pt \
 sbatch delivery/scripts/slurm/preprocessing/precompute_signlanguage_yolo_keypoints.sh
 ```
 
-## Training Jobs
-
-These jobs build correction datasets, train a corrector, apply it, and run the
-associated geometry evaluation. They require the prediction roots and SMPL-X
-model files documented in `delivery/docs/MODEL_SETUP.md`.
-
-| Job | Purpose | Main output |
-| --- | --- | --- |
-| `training/train_signlanguage_global_correction.sh` | Train global orientation and translation correction. | Global-correction checkpoint and corrected parameters |
-| `training/train_signlanguage_hand_correction.sh` | Train wrist and finger correction. | Hand-correction checkpoint and corrected parameters |
-| `training/train_signlanguage_upperbody_correction.sh` | Train upper-body rotation correction and evaluate hand correction on top. | Upper-body checkpoint and scale evaluation |
-| `training/train_signlanguage_upperbody_translation_correction.sh` | Train torso/arm rotation plus translation correction. | Scale-sweep checkpoints and evaluations |
-| `training/train_signlanguage_2d_guided_upperbody.sh` | Extract/load 2D pose, train the guided upper-body model, and evaluate correction scales. | 2D-guided checkpoint and scale evaluations |
-
-The global, hand, and upper-body jobs default to paths from the original server
-experiments. Set `OUTPUT_ROOT`, `PRED_ROOT`, `PKG_DIR`, and checkpoint variables
-when running in another project allocation.
-
 ## Evaluation Jobs
 
 | Job | Purpose | Main controls |
@@ -119,7 +101,9 @@ matching evaluator modules and downloaded datasets in the repository checkout.
 | Job | Purpose |
 | --- | --- |
 | `ablations/evaluate_signlanguage_ablation.sh` | Compare raw, fusion, global, hand, and 2D-guided outputs on the held-out split. |
-| `ablations/train_evaluate_no2d_upperbody.sh` | Train the SMPL-X-only upper-body ablation and compare it with 2D guidance. |
+
+Training and training-ablation jobs are not delivery operations. Their archived
+copies are clearly marked under `research/signlanguage_training/slurm/`.
 
 ## Benchmark Jobs
 

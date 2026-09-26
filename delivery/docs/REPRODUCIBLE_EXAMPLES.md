@@ -67,13 +67,13 @@ raw body/hand/face fusion
   -> evaluation/rendering
 ```
 
-Use the matching scripts in the repository root:
+Use the matching deployment tools:
 
 ```text
-apply_signlanguage_global_correction.py
-apply_signlanguage_hand_correction.py
-apply_signlanguage_2d_guided_upperbody_corrector.py
-evaluate_signlanguage_geometry.py
+tools/postprocessing/apply_signlanguage_global_correction.py
+tools/postprocessing/apply_signlanguage_hand_correction.py
+tools/postprocessing/apply_signlanguage_2d_guided_upperbody_corrector.py
+tools/evaluation/evaluate_signlanguage_geometry.py
 ```
 
 The corrector path is for benchmark reproduction and research evaluation. The
