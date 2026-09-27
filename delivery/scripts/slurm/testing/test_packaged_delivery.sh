@@ -19,6 +19,8 @@ SOURCE_REPO="${SOURCE_REPO:-/home/khtun/video2simplx/Video2SmplxPy10/Video2Smplx
 PACKAGE_ARCHIVE="${PACKAGE_ARCHIVE:?Set PACKAGE_ARCHIVE to the final Video2Smplx_document_set_*.tar.gz}"
 TEST_ROOT="${TEST_ROOT:-/project/lt200246-mmacma/khtun/video2smplx_clean_package_test_${SLURM_JOB_ID:-manual}}"
 RUN_FULL_PIPELINE="${RUN_FULL_PIPELINE:-1}"
+YOLO_MODEL="${YOLO_MODEL:-${SOURCE_REPO}/yolov8x-pose.pt}"
+EVAL_MODEL="${EVAL_MODEL:-${SOURCE_REPO}/SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz}"
 
 rm -rf "${TEST_ROOT}"
 mkdir -p "${TEST_ROOT}"
@@ -57,6 +59,13 @@ for script in \
 done
 
 if [ "${RUN_FULL_PIPELINE}" = "1" ]; then
+  for asset in "${YOLO_MODEL}" "${EVAL_MODEL}"; do
+    if [ ! -s "${asset}" ]; then
+      echo "[error] external licensed model missing: ${asset}" >&2
+      exit 2
+    fi
+  done
+
   echo "[run] full accurate pipeline on bundled sample"
   "${PYTHON[@]}" delivery/source/integrated_postprocessed_pipeline_cli.py \
     --video delivery/sample/input-sample.mp4 \
@@ -68,7 +77,8 @@ if [ "${RUN_FULL_PIPELINE}" = "1" ]; then
     --global-ckpt delivery/models/correctors/global/best_model.pt \
     --hand-ckpt delivery/models/correctors/hand/best_model.pt \
     --upper2d-ckpt delivery/models/correctors/upper2d/best_model.pt \
-    --eval-model SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz \
+    --eval-model "${EVAL_MODEL}" \
+    --yolo-model "${YOLO_MODEL}" \
     --smplestx-detector-stride 5 \
     --smplestx-batch-size 8 \
     --smplestx-inference-mode \

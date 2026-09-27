@@ -161,6 +161,8 @@ Run the clean-package test after building the final archive:
 
 ```bash
 PACKAGE_ARCHIVE=/absolute/path/to/Video2Smplx_document_set_<STAMP>.tar.gz \
+YOLO_MODEL=/absolute/path/to/yolov8x-pose.pt \
+EVAL_MODEL=/absolute/path/to/SMPLX_FEMALE.npz \
 RUN_FULL_PIPELINE=1 \
 sbatch delivery/scripts/slurm/testing/test_packaged_delivery.sh
 ```
