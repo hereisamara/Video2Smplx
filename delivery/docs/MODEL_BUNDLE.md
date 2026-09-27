@@ -27,6 +27,11 @@ The archive contains:
 - the global, hand, and 2D upper-body learned correctors;
 - a SHA-256 checksum file and model setup documentation.
 
+Only files required by the runtime verifier are copied. Redundant SMPL-X PKL
+variants, downloaded ZIP archives, experiment outputs, and source-file ownership
+metadata are intentionally excluded to reduce size and avoid project-filesystem
+quota errors.
+
 The bundle preserves repository-relative paths. Extract its top-level contents
 over a Video2Smplx source checkout, then verify:
 
