@@ -366,6 +366,18 @@ bash delivery/scripts/install_server_delivery_assets.sh
 bash delivery/scripts/verify_delivery_readiness.sh
 ```
 
+Package all large runtime models as a separate archive only after confirming
+that the recipient is authorized under the SMPL-X, MANO, FLAME, DECA, EMOCA,
+SMPLest-X, WiLoR, and Ultralytics licenses:
+
+```bash
+ACKNOWLEDGE_RESTRICTED_MODEL_LICENSES=1 \
+YOLO_POSE_MODEL=/absolute/path/to/yolov8x-pose.pt \
+bash delivery/scripts/package_runtime_models.sh /project/path/to/output
+```
+
+Full instructions are in `delivery/docs/MODEL_BUNDLE.md`.
+
 Precompute YOLO keypoints once for repeatable accurate-mode timing:
 
 ```bash

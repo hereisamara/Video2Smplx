@@ -68,6 +68,16 @@ EMOCA-Inference/
 Download EMOCA assets from the official EMOCA instructions. Download FLAME assets
 from the official FLAME website after accepting the FLAME license.
 
+EMOCA's FAN face detector also uses cached `2DFAN` landmark and `s3fd` detector
+weights from the PyTorch hub checkpoint directory. The separate model packager
+copies that cache into:
+
+```text
+runtime_model_cache/torch/hub/checkpoints/
+```
+
+The EMOCA runner uses this bundled cache automatically when present.
+
 ## Post-Processing Corrector Models
 
 The research correctors trained for SignLanguage are optional post-processors.
@@ -97,3 +107,17 @@ SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz
 
 Use the matching programs under `tools/postprocessing/` when reproducing the
 corrected benchmark pipeline.
+
+## Separate Physical Model Package
+
+When the recipient is authorized to receive every third-party model, package
+the complete runtime model set separately from the source/document archive:
+
+```bash
+ACKNOWLEDGE_RESTRICTED_MODEL_LICENSES=1 \
+YOLO_POSE_MODEL=/absolute/path/to/yolov8x-pose.pt \
+bash delivery/scripts/package_runtime_models.sh /project/path/to/output
+```
+
+See `delivery/docs/MODEL_BUNDLE.md` for archive contents, extraction,
+verification, splitting for FAT32 media, and licensing restrictions.

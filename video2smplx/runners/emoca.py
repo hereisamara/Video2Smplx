@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,9 @@ class EMOCARunner:
         self.detector_stride = max(1, int(detector_stride))
         self._cached_face_bbox: tuple[float, float, float, float, Any] | None = None
         self.device = torch.device(device if device == "cuda" and torch.cuda.is_available() else "cpu")
+        bundled_torch_home = self.project_dir.parent / "runtime_model_cache" / "torch"
+        if bundled_torch_home.is_dir():
+            os.environ.setdefault("TORCH_HOME", str(bundled_torch_home))
         path_to_models = self.project_dir / "assets" / "EMOCA" / "models"
         checkpoint_dir = path_to_models / model_name / "detail" / "checkpoints"
         require_files(

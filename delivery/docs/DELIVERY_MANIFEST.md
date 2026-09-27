@@ -20,6 +20,7 @@ and sample results needed to run and verify the sign-language SMPL-X pipeline.
 | Installation manual | `delivery/docs/INSTALLATION.md` |
 | Complete user documentation | `delivery/docs/USER_DOCUMENTATION.md` |
 | Model setup/download instructions | `delivery/docs/MODEL_SETUP.md` |
+| Separate runtime-model bundle guide | `delivery/docs/MODEL_BUNDLE.md` |
 | Reproducible examples | `delivery/docs/REPRODUCIBLE_EXAMPLES.md` |
 | Video output comparison README | `README_VIDEO_OUTPUT_COMPARISON.md` and `delivery/docs/VIDEO_OUTPUT_COMPARISON.md` |
 | Sample sign-language video and results | `delivery/sample/` |
@@ -28,6 +29,8 @@ and sample results needed to run and verify the sign-language SMPL-X pipeline.
 | Flash-drive copy script | `delivery/scripts/prepare_flash_drive_set.sh` |
 | Verified server asset installer | `delivery/scripts/install_server_delivery_assets.sh` |
 | Delivery readiness checker | `delivery/scripts/verify_delivery_readiness.sh` |
+| Runtime-model verifier | `delivery/scripts/verify_runtime_models.sh` |
+| Separate runtime-model packager | `delivery/scripts/package_runtime_models.sh` |
 | Portable learned correctors | `delivery/models/correctors/` |
 | Slurm job index and server usage guide | `delivery/scripts/slurm/README.md` |
 | Base integrated server test | `delivery/scripts/slurm/testing/test_integrated_pipeline.sh` |
@@ -52,6 +55,11 @@ explicitly outside the delivery set.
 The document-set and flash-drive builders run the readiness checker by default.
 They will not create a final package until the three learned corrector
 checkpoints and the verified final output files have been installed.
+
+Large third-party model weights are generated as a separate runtime-model
+archive. Set `MODEL_BUNDLE_PATH` when running `prepare_flash_drive_set.sh` to
+place that archive or its split-part directory under `runtime_models/` on the
+flash-drive set.
 
 ## Final Output Folder Contract
 

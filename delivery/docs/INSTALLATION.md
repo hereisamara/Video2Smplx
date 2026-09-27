@@ -42,6 +42,18 @@ bash delivery/scripts/verify_delivery_readiness.sh
 The corrector destination paths are under `delivery/models/correctors/`; no
 cluster-specific checkpoint path is required by the integrated CLI.
 
+For offline installation from the separately generated model archive:
+
+```bash
+tar -xf Video2Smplx_runtime_models_<STAMP>.tar
+cp -a Video2Smplx_runtime_models_<STAMP>/. /path/to/Video2Smplx/
+cd /path/to/Video2Smplx
+bash delivery/scripts/verify_runtime_models.sh
+```
+
+See `delivery/docs/MODEL_BUNDLE.md` before transferring restricted model
+weights.
+
 ## Repository Layout
 
 Expected project root:
