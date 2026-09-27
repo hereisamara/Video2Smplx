@@ -26,8 +26,7 @@ check_file "2D upper corrector" "delivery/models/correctors/upper2d/best_model.p
 check_file "final SMPL-X parameters" "${FINAL_DIR}/smplx_params.npz"
 check_file "final rendered video" "${FINAL_DIR}/rendered/smplx_render.mp4"
 check_file "final side-by-side video" "${FINAL_DIR}/side_by_side_input_render.mp4"
-check_file "final combine report" "${FINAL_DIR}/combine_render_report.json"
-check_file "final runtime report" "${FINAL_DIR}/runtime_report.json"
+check_file "final runtime and configuration report" "${FINAL_DIR}/runtime_report.json"
 
 for path in \
   delivery/source/body_estimation_cli.py \

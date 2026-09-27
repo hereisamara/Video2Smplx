@@ -15,7 +15,12 @@ mkdir -p "${LOCAL_OUT}/rendered"
 scp "${REMOTE_RUN}/smplx_params.npz" "${LOCAL_OUT}/"
 scp "${REMOTE_RUN}/rendered/smplx_render.mp4" "${LOCAL_OUT}/rendered/"
 scp "${REMOTE_RUN}/side_by_side_input_render.mp4" "${LOCAL_OUT}/"
-scp "${REMOTE_RUN}/combine_render_report.json" "${LOCAL_OUT}/"
+
+if scp "${REMOTE_RUN}/combine_render_report.json" "${LOCAL_OUT}/"; then
+  echo "[done] copied optional combine report"
+else
+  echo "[info] no separate combine report; integrated runs store settings in the runtime report"
+fi
 
 if [ -n "${REMOTE_RUNTIME}" ]; then
   scp "${REMOTE_RUNTIME}" "${LOCAL_OUT}/runtime_report.json"

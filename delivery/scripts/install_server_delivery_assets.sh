@@ -28,7 +28,7 @@ require_file() {
 require_file "${FINAL_SOURCE}/smplx_params.npz"
 require_file "${FINAL_SOURCE}/rendered/smplx_render.mp4"
 require_file "${FINAL_SOURCE}/side_by_side_input_render.mp4"
-require_file "${FINAL_SOURCE}/combine_render_report.json"
+require_file "${RUNTIME_SOURCE}"
 require_file "${GLOBAL_CKPT_SOURCE}"
 require_file "${HAND_CKPT_SOURCE}"
 require_file "${UPPER2D_CKPT_SOURCE}"
@@ -41,12 +41,12 @@ mkdir -p "${FINAL_DEST}/rendered" \
 cp "${FINAL_SOURCE}/smplx_params.npz" "${FINAL_DEST}/smplx_params.npz"
 cp "${FINAL_SOURCE}/rendered/smplx_render.mp4" "${FINAL_DEST}/rendered/smplx_render.mp4"
 cp "${FINAL_SOURCE}/side_by_side_input_render.mp4" "${FINAL_DEST}/side_by_side_input_render.mp4"
-cp "${FINAL_SOURCE}/combine_render_report.json" "${FINAL_DEST}/combine_render_report.json"
+cp "${RUNTIME_SOURCE}" "${FINAL_DEST}/runtime_report.json"
 
-if [ -s "${RUNTIME_SOURCE}" ]; then
-  cp "${RUNTIME_SOURCE}" "${FINAL_DEST}/runtime_report.json"
+if [ -s "${FINAL_SOURCE}/combine_render_report.json" ]; then
+  cp "${FINAL_SOURCE}/combine_render_report.json" "${FINAL_DEST}/combine_render_report.json"
 else
-  echo "[warn] runtime report not found: ${RUNTIME_SOURCE}" >&2
+  echo "[info] integrated run has no separate combine report; runtime_report.json contains settings"
 fi
 
 if [ -s "${GEOMETRY_SOURCE}" ]; then

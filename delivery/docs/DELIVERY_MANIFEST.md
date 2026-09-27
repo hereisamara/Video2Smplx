@@ -90,6 +90,12 @@ transl
 smplx_param_vector
 ```
 
+The one-process integrated CLI writes
+`runtime/integrated_postprocessed_runtime_report.json`; its `settings` object is
+the configuration record. The independent combine CLI instead writes
+`combine_render_report.json`. A final delivery run needs the applicable report,
+not necessarily both.
+
 ## Current Best SignLanguage Held-Out Test Result
 
 The best held-out result from the current experiments is the 2D-guided upper-body
