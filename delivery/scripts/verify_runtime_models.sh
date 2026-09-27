@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 YOLO_POSE_MODEL="${YOLO_POSE_MODEL:-${ROOT_DIR}/yolov8x-pose.pt}"
 TORCH_HUB_DIR="${TORCH_HUB_DIR:-${ROOT_DIR}/runtime_model_cache/torch/hub}"
+CORRECTOR_ROOT="${CORRECTOR_ROOT:-${ROOT_DIR}}"
 FAILED=0
 
 check_file() {
@@ -73,9 +74,9 @@ else
 fi
 
 check_file "YOLO pose model" "${YOLO_POSE_MODEL}"
-check_file "global corrector" "${ROOT_DIR}/delivery/models/correctors/global/best_model.pt"
-check_file "hand corrector" "${ROOT_DIR}/delivery/models/correctors/hand/best_model.pt"
-check_file "2D upper corrector" "${ROOT_DIR}/delivery/models/correctors/upper2d/best_model.pt"
+check_file "global corrector" "${CORRECTOR_ROOT}/delivery/models/correctors/global/best_model.pt"
+check_file "hand corrector" "${CORRECTOR_ROOT}/delivery/models/correctors/hand/best_model.pt"
+check_file "2D upper corrector" "${CORRECTOR_ROOT}/delivery/models/correctors/upper2d/best_model.pt"
 
 if [ "${FAILED}" -ne 0 ]; then
   echo "[error] runtime model set is incomplete" >&2

@@ -5,11 +5,16 @@ separate runtime-model archive on the authorized server with:
 
 ```bash
 ACKNOWLEDGE_RESTRICTED_MODEL_LICENSES=1 \
+MODEL_SOURCE_ROOT=/home/khtun/video2simplx/Video2SmplxPy10/Video2Smplx \
 YOLO_POSE_MODEL=/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/models/yolov8x-pose.pt \
 COMPRESSION=none \
 bash delivery/scripts/package_runtime_models.sh \
   /project/lt200246-mmacma/khtun/video2smplx_delivery_release
 ```
+
+`MODEL_SOURCE_ROOT` is the existing server checkout containing the downloaded
+SMPLest-X, WiLoR, and EMOCA assets. The correctors are read from the delivery
+worktree by default; override `CORRECTOR_SOURCE_ROOT` only when needed.
 
 The archive contains:
 

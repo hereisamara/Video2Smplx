@@ -115,6 +115,7 @@ the complete runtime model set separately from the source/document archive:
 
 ```bash
 ACKNOWLEDGE_RESTRICTED_MODEL_LICENSES=1 \
+MODEL_SOURCE_ROOT=/path/to/existing/Video2Smplx \
 YOLO_POSE_MODEL=/absolute/path/to/yolov8x-pose.pt \
 bash delivery/scripts/package_runtime_models.sh /project/path/to/output
 ```

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+MODEL_SOURCE_ROOT="${MODEL_SOURCE_ROOT:-${ROOT_DIR}}"
+CORRECTOR_SOURCE_ROOT="${CORRECTOR_SOURCE_ROOT:-${ROOT_DIR}}"
 OUT_DIR="${1:-${ROOT_DIR}/artifacts/delivery_packages}"
 YOLO_POSE_MODEL="${YOLO_POSE_MODEL:-/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/models/yolov8x-pose.pt}"
 TORCH_HUB_DIR="${TORCH_HUB_DIR:-${TORCH_HOME:-${HOME}/.cache/torch}/hub}"
@@ -22,7 +24,8 @@ case "${COMPRESSION}" in
 esac
 
 YOLO_POSE_MODEL="${YOLO_POSE_MODEL}" TORCH_HUB_DIR="${TORCH_HUB_DIR}" \
-  bash "${ROOT_DIR}/delivery/scripts/verify_runtime_models.sh" "${ROOT_DIR}"
+  CORRECTOR_ROOT="${CORRECTOR_SOURCE_ROOT}" \
+  bash "${ROOT_DIR}/delivery/scripts/verify_runtime_models.sh" "${MODEL_SOURCE_ROOT}"
 
 mkdir -p "${OUT_DIR}"
 BUNDLE_NAME="Video2Smplx_runtime_models_${STAMP}"
@@ -35,24 +38,24 @@ mkdir -p \
   "${BUNDLE_DIR}/delivery/models" \
   "${BUNDLE_DIR}/runtime_model_cache/torch/hub"
 
-cp -a "${ROOT_DIR}/SMPLest-X-Inference/pretrained_models/smplest_x_h" \
+cp -a "${MODEL_SOURCE_ROOT}/SMPLest-X-Inference/pretrained_models/smplest_x_h" \
   "${BUNDLE_DIR}/SMPLest-X-Inference/pretrained_models/"
-cp -a "${ROOT_DIR}/SMPLest-X-Inference/pretrained_models/yolov8x.pt" \
+cp -a "${MODEL_SOURCE_ROOT}/SMPLest-X-Inference/pretrained_models/yolov8x.pt" \
   "${BUNDLE_DIR}/SMPLest-X-Inference/pretrained_models/yolov8x.pt"
-cp -a "${ROOT_DIR}/SMPLest-X-Inference/human_models/human_model_files/smplx" \
+cp -a "${MODEL_SOURCE_ROOT}/SMPLest-X-Inference/human_models/human_model_files/smplx" \
   "${BUNDLE_DIR}/SMPLest-X-Inference/human_models/human_model_files/"
 
-cp -a "${ROOT_DIR}/WiLoR-Inference/pretrained_models" \
+cp -a "${MODEL_SOURCE_ROOT}/WiLoR-Inference/pretrained_models" \
   "${BUNDLE_DIR}/WiLoR-Inference/pretrained_models"
-cp -a "${ROOT_DIR}/WiLoR-Inference/mano_data" \
+cp -a "${MODEL_SOURCE_ROOT}/WiLoR-Inference/mano_data" \
   "${BUNDLE_DIR}/WiLoR-Inference/mano_data"
 
-cp -a "${ROOT_DIR}/EMOCA-Inference/assets" \
+cp -a "${MODEL_SOURCE_ROOT}/EMOCA-Inference/assets" \
   "${BUNDLE_DIR}/EMOCA-Inference/assets"
 cp -a "${TORCH_HUB_DIR}/checkpoints" \
   "${BUNDLE_DIR}/runtime_model_cache/torch/hub/checkpoints"
 
-cp -a "${ROOT_DIR}/delivery/models/correctors" \
+cp -a "${CORRECTOR_SOURCE_ROOT}/delivery/models/correctors" \
   "${BUNDLE_DIR}/delivery/models/correctors"
 cp -a "${YOLO_POSE_MODEL}" "${BUNDLE_DIR}/yolov8x-pose.pt"
 
