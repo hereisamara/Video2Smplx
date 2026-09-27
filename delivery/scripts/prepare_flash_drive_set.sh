@@ -10,6 +10,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DELIVERY_DIR="${ROOT_DIR}/delivery"
 TARGET="$1/Video2Smplx_delivery"
 
+if [ "${ALLOW_INCOMPLETE_DELIVERY:-0}" != "1" ]; then
+  bash "${ROOT_DIR}/delivery/scripts/verify_delivery_readiness.sh"
+fi
+
 mkdir -p "${TARGET}"
 cp -R "${DELIVERY_DIR}" "${TARGET}/delivery"
 cp -R "${ROOT_DIR}/tools" "${TARGET}/tools"
@@ -20,6 +24,7 @@ cp "${ROOT_DIR}/smplestx_wilor_emoca_fuse.py" "${TARGET}/smplestx_wilor_emoca_fu
 cp "${ROOT_DIR}/README_DELIVERY.md" "${TARGET}/README_DELIVERY.md"
 cp "${ROOT_DIR}/README_TOR.md" "${TARGET}/README_TOR.md"
 cp "${ROOT_DIR}/README_VIDEO_OUTPUT_COMPARISON.md" "${TARGET}/README_VIDEO_OUTPUT_COMPARISON.md"
+cp "${ROOT_DIR}/README.md" "${TARGET}/README.md"
 
 if [ -d "${ROOT_DIR}/docs/media/ablation_s2" ]; then
   mkdir -p "${TARGET}/docs/media"

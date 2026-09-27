@@ -74,12 +74,25 @@ The research correctors trained for SignLanguage are optional post-processors.
 They are not required for the four base CLI programs, but they are used for the
 best reported result.
 
-Expected server locations from the experiments:
+Portable delivery locations:
 
 ```text
-/project/lt200246-mmacma/khtun/signlanguage_global_correction_outputs/
-/project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs/
-/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/
+delivery/models/correctors/global/best_model.pt
+delivery/models/correctors/hand/best_model.pt
+delivery/models/correctors/upper2d/best_model.pt
+```
+
+Run `delivery/scripts/install_server_delivery_assets.sh` from the repository
+root on the training server to copy the verified checkpoints and final sample
+outputs into these portable delivery locations. The script also writes SHA-256
+checksums. The corrector provenance and original server locations are documented
+in `delivery/models/correctors/README.md`.
+
+The licensed SMPL-X model is not copied into `delivery/`. Its runtime location
+is:
+
+```text
+SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz
 ```
 
 Use the matching programs under `tools/postprocessing/` when reproducing the

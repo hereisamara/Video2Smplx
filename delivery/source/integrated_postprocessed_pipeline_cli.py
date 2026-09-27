@@ -25,6 +25,17 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+DELIVERY_MODELS = ROOT / "delivery" / "models"
+CORRECTOR_MODELS = DELIVERY_MODELS / "correctors"
+DEFAULT_EVAL_MODEL = (
+    ROOT
+    / "SMPLest-X-Inference"
+    / "human_models"
+    / "human_model_files"
+    / "smplx"
+    / "SMPLX_FEMALE.npz"
+)
+
 from tools.postprocessing.apply_signlanguage_2d_guided_upperbody_corrector import (  # noqa: E402
     apply_delta as apply_upper_delta,
     normalize_indices,
@@ -79,7 +90,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--smplestx-ckpt", default="smplest_x_h")
     parser.add_argument("--emoca-model", default="EMOCA_v2_lr_mse_20")
     parser.add_argument("--smplx-model", default=str(DEFAULT_SMPLX_MODEL))
-    parser.add_argument("--eval-model", default="signlanguage_global_correction_server/models/SMPLX_FEMALE.npz")
+    parser.add_argument("--eval-model", default=str(DEFAULT_EVAL_MODEL))
     parser.add_argument("--multi-person", action="store_true")
     parser.add_argument(
         "--smplestx-only",
@@ -178,9 +189,18 @@ def parse_args() -> argparse.Namespace:
             "fast/global_hand=global+hand, accurate=global+hand+2D upper-body."
         ),
     )
-    parser.add_argument("--global-ckpt", default="outputs_fusion_signlanguage_no_stablized/evaluation/global_correction_model_upper_r1/best_model.pt")
-    parser.add_argument("--hand-ckpt", default="/project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs/evaluation/hand_correction_model_wrist_fingers_r1/best_model.pt")
-    parser.add_argument("--upper2d-ckpt", default="/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/evaluation/2d_guided_upperbody_model_r1/best_model.pt")
+    parser.add_argument(
+        "--global-ckpt",
+        default=str(CORRECTOR_MODELS / "global" / "best_model.pt"),
+    )
+    parser.add_argument(
+        "--hand-ckpt",
+        default=str(CORRECTOR_MODELS / "hand" / "best_model.pt"),
+    )
+    parser.add_argument(
+        "--upper2d-ckpt",
+        default=str(CORRECTOR_MODELS / "upper2d" / "best_model.pt"),
+    )
     parser.add_argument("--yolo-model", default="yolov8x-pose.pt")
     parser.add_argument(
         "--precomputed-yolo-keypoints",

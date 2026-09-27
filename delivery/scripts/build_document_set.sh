@@ -6,6 +6,10 @@ DELIVERY_DIR="${ROOT_DIR}/delivery"
 OUT_DIR="${1:-${ROOT_DIR}/artifacts/delivery_packages}"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 
+if [ "${ALLOW_INCOMPLETE_DELIVERY:-0}" != "1" ]; then
+  bash "${ROOT_DIR}/delivery/scripts/verify_delivery_readiness.sh"
+fi
+
 mkdir -p "${OUT_DIR}"
 DOC_SET="${OUT_DIR}/Video2Smplx_document_set_${STAMP}"
 mkdir -p "${DOC_SET}"
@@ -19,6 +23,7 @@ cp "${ROOT_DIR}/smplestx_wilor_emoca_fuse.py" "${DOC_SET}/smplestx_wilor_emoca_f
 cp "${ROOT_DIR}/README_DELIVERY.md" "${DOC_SET}/README_DELIVERY.md"
 cp "${ROOT_DIR}/README_TOR.md" "${DOC_SET}/README_TOR.md"
 cp "${ROOT_DIR}/README_VIDEO_OUTPUT_COMPARISON.md" "${DOC_SET}/README_VIDEO_OUTPUT_COMPARISON.md"
+cp "${ROOT_DIR}/README.md" "${DOC_SET}/README.md"
 
 if [ -d "${ROOT_DIR}/docs/media/ablation_s2" ]; then
   mkdir -p "${DOC_SET}/docs/media"

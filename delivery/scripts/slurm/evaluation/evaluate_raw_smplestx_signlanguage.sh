@@ -20,8 +20,7 @@ cd /home/khtun/video2simplx/Video2SmplxPy10/Video2Smplx
 PYTHON="conda run --no-capture-output -n video2smplx_shared310 python"
 PRED_ROOT="${PRED_ROOT:-outputs_fusion_signlanguage_no_stablized}"
 PARAMS_SUBDIR="${PARAMS_SUBDIR:-smplestx_params}"
-PKG_DIR="${PKG_DIR:-signlanguage_global_correction_server}"
-MODEL_PATH="${MODEL_PATH:-${PKG_DIR}/models/SMPLX_FEMALE.npz}"
+MODEL_PATH="${MODEL_PATH:-SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz}"
 OUTPUT_DIR="${OUTPUT_DIR:-${PRED_ROOT}/evaluation/smplx_female_raw_smplestx}"
 
 echo "[check] working directory: $(pwd)"

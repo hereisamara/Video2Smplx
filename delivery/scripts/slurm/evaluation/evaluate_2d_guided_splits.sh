@@ -20,7 +20,7 @@ cd /home/khtun/video2simplx/Video2SmplxPy10/Video2Smplx
 PYTHON="conda run --no-capture-output -n video2smplx_shared310 python"
 OUTPUT_ROOT="${OUTPUT_ROOT:-/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs}"
 DATASET_PATH="${DATASET_PATH:-${OUTPUT_ROOT}/evaluation/2d_guided_upperbody_dataset_r1.npz}"
-MODEL_PATH="${MODEL_PATH:-signlanguage_global_correction_server/models/SMPLX_FEMALE.npz}"
+MODEL_PATH="${MODEL_PATH:-SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz}"
 SPLITS="${SPLITS:-test}"
 PARAMS_SUBDIRS="${PARAMS_SUBDIRS:-fused_params_2d_upper_corrected_s0p75}"
 EVAL_OUT="${EVAL_OUT:-${OUTPUT_ROOT}/evaluation/split_eval}"

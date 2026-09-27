@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--before-subdir", default="fused_params_model_global_hand_corrected")
     parser.add_argument("--after-root", type=Path, required=True)
     parser.add_argument("--after-subdir", default="fused_params_2d_upper_corrected_s0p75")
-    parser.add_argument("--model-path", type=Path, default=Path("signlanguage_global_correction_server/models/SMPLX_FEMALE.npz"))
+    parser.add_argument("--model-path", type=Path, default=Path("SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz"))
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--sequences",

@@ -26,9 +26,13 @@ and sample results needed to run and verify the sign-language SMPL-X pipeline.
 | Objective result tables | `delivery/results/` |
 | Document set build script | `delivery/scripts/build_document_set.sh` |
 | Flash-drive copy script | `delivery/scripts/prepare_flash_drive_set.sh` |
+| Verified server asset installer | `delivery/scripts/install_server_delivery_assets.sh` |
+| Delivery readiness checker | `delivery/scripts/verify_delivery_readiness.sh` |
+| Portable learned correctors | `delivery/models/correctors/` |
 | Slurm job index and server usage guide | `delivery/scripts/slurm/README.md` |
 | Base integrated server test | `delivery/scripts/slurm/testing/test_integrated_pipeline.sh` |
 | Final postprocessed server test | `delivery/scripts/slurm/testing/test_final_postprocessed_pipeline.sh` |
+| Clean extracted-package test | `delivery/scripts/slurm/testing/test_packaged_delivery.sh` |
 | Final postprocessed runtime benchmark | `delivery/scripts/slurm/benchmarks/benchmark_final_postprocessed_pipeline.sh` |
 | Fair FPS with/without post-processing benchmark | `delivery/scripts/slurm/benchmarks/benchmark_fair_fps.sh` |
 | One-process integrated postprocessed benchmark | `delivery/scripts/slurm/benchmarks/benchmark_integrated_oneprocess.sh` |
@@ -44,6 +48,10 @@ Training dataset builders, trainers, GT oracle programs, training Slurm jobs,
 and rejected upper-body experiments are retained under
 `research/signlanguage_training/` for internal reproducibility. They are
 explicitly outside the delivery set.
+
+The document-set and flash-drive builders run the readiness checker by default.
+They will not create a final package until the three learned corrector
+checkpoints and the verified final output files have been installed.
 
 ## Final Output Folder Contract
 

@@ -142,11 +142,11 @@ python delivery/source/integrated_postprocessed_pipeline_cli.py \
   --device cuda \
   --postprocess-mode accurate \
   --precomputed-yolo-keypoints runs_tor/precomputed_yolo_pose_keypoints.json \
-  --global-ckpt outputs_fusion_signlanguage_no_stablized/evaluation/global_correction_model_upper_r1/best_model.pt \
-  --hand-ckpt /project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs/evaluation/hand_correction_model_wrist_fingers_r1/best_model.pt \
-  --upper2d-ckpt /project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/evaluation/2d_guided_upperbody_model_r1/best_model.pt \
+  --global-ckpt delivery/models/correctors/global/best_model.pt \
+  --hand-ckpt delivery/models/correctors/hand/best_model.pt \
+  --upper2d-ckpt delivery/models/correctors/upper2d/best_model.pt \
   --smplx-model SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_NEUTRAL.npz \
-  --eval-model signlanguage_global_correction_server/models/SMPLX_FEMALE.npz \
+  --eval-model SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz \
   --smplestx-detector-stride 5 \
   --smplestx-batch-size 8 \
   --smplestx-inference-mode \
@@ -263,6 +263,20 @@ Important columns:
 Measured with precomputed YOLO keypoints on S2/S3/S4, the accurate
 post-processing stack adds about 13 ms/frame. The major remaining runtime cost
 is the base SMPLest-X/WiLoR/EMOCA inference.
+
+Current measured values are:
+
+| Runtime scope | Result |
+| --- | ---: |
+| SMPLest-X-only normal working throughput after warm-up | 19.59 FPS |
+| Full foundation-model steady throughput | 6.76 FPS |
+| Final pipeline without initial load or rendering | 3.57 FPS |
+| Final pipeline including rendering, with precomputed YOLO | 1.98 FPS |
+| Standalone YOLO keypoint preprocessing | 3.35 FPS |
+
+The SMPLest-X-only value must not be reported as full-pipeline FPS. For unseen
+videos, YOLO preprocessing is either an additional pass or an online pipeline
+stage and must be reported separately.
 
 ## 8. Current SignLanguage Held-Out Results
 

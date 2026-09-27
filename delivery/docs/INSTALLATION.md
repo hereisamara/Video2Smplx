@@ -31,6 +31,17 @@ ultralytics
 Use the existing `video2smplx_shared310` environment on the cluster when possible.
 It already matches the current pipeline scripts and model wrappers.
 
+After installing the licensed third-party models, copy the project-trained
+correctors and verified final sample from their server experiment locations:
+
+```bash
+bash delivery/scripts/install_server_delivery_assets.sh
+bash delivery/scripts/verify_delivery_readiness.sh
+```
+
+The corrector destination paths are under `delivery/models/correctors/`; no
+cluster-specific checkpoint path is required by the integrated CLI.
+
 ## Repository Layout
 
 Expected project root:

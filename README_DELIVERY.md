@@ -101,9 +101,9 @@ python delivery/source/integrated_postprocessed_pipeline_cli.py \
   --device cuda \
   --postprocess-mode accurate \
   --precomputed-yolo-keypoints runs_delivery/precomputed_yolo_pose_keypoints.json \
-  --global-ckpt outputs_fusion_signlanguage_no_stablized/evaluation/global_correction_model_upper_r1/best_model.pt \
-  --hand-ckpt /project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs/evaluation/hand_correction_model_wrist_fingers_r1/best_model.pt \
-  --upper2d-ckpt /project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/evaluation/2d_guided_upperbody_model_r1/best_model.pt \
+  --global-ckpt delivery/models/correctors/global/best_model.pt \
+  --hand-ckpt delivery/models/correctors/hand/best_model.pt \
+  --upper2d-ckpt delivery/models/correctors/upper2d/best_model.pt \
   --smplestx-detector-stride 5 \
   --smplestx-batch-size 8 \
   --smplestx-inference-mode \
@@ -272,23 +272,35 @@ in-domain comparison, not as an official UBody leaderboard entry.
 | OSX finetuned | UBody | 81.9 | 42.2 | 41.5 | 8.6 | 21.2 | 2.0 |
 | AiOS | UBody | 58.6 | 32.5 | 39.0 | 7.3 | 19.6 | 2.8 |
 | SMPLer-X-L20 finetuned | UBody | 57.4 | 31.9 | 40.2 | 10.3 | 21.6 | 2.8 |
-| Multi-HMR ViT-L/14 | UBody | 51.2 | 21.0 | 25.0 | 7.2 | 16.2 | 1.8 |
 | SMPLest-X-H40 | UBody | 51.1 | 27.8 | 32.9 | 7.9 | 21.4 | 2.5 |
-| SMPLest-X-H40 finetuned | UBody | 50.2 | 26.9 | 31.8 | 8.4 | 18.9 | 2.4 |
-| CoEvoer | UBody | 51.6 | 26.5 | 27.8 | 7.1 | 16.2 | 1.8 |
 | Ours, 2D upper scale 0.75 | UBody SignLanguage section | 54.11 | 28.55 | 29.52 | 5.15 | 12.63 | not reported in this run |
 
 Sources:
 
 - SMPLer-X and earlier UBody baselines: https://ar5iv.labs.arxiv.org/html/2309.17448
 - SMPLest-X UBody table: https://arxiv.org/html/2501.09782v1
-- Multi-HMR UBody table: https://ar5iv.labs.arxiv.org/html/2402.14654
-- CoEvoer UBody table: https://arxiv.org/html/2604.17959v1
 
 ## 8. Runtime And FPS
 
 Runtime results with precomputed YOLO keypoints are stored in
 `delivery/results/runtime_precomputed_yolo_summary.csv`.
+
+Measured runtime phases must not be presented as interchangeable FPS values:
+
+| Scope | FPS or time | Included work |
+| --- | ---: | --- |
+| SMPLest-X model initialization | 59.31 s | One-time startup; excluded from working FPS |
+| SMPLest-X first complete warm-up batch | 27.07 s | Eight frames; excluded from working FPS |
+| SMPLest-X-only normal working throughput | 19.59 FPS | Body model after initialization and first-batch warm-up |
+| Full foundation-model steady throughput | 6.76 FPS | SMPLest-X, WiLoR, EMOCA, and fusion after warm-up |
+| Final pipeline, no initial load and no rendering | 3.57 FPS | Foundation models, correctors, smoothing, and final NPZ export |
+| Final pipeline with rendering | 1.98 FPS | Measured end-to-end run with precomputed YOLO keypoints |
+| Standalone YOLOv8x-pose preprocessing | 3.35 FPS | 450 frames in 134.499 s, including startup and JSON output |
+
+The `19.59 FPS` value is therefore not the throughput of the complete final
+pipeline. It is the normal working rate of SMPLest-X alone. Similarly, the
+precomputed-keypoint final-pipeline values do not include the one-time YOLO
+extraction pass for a previously unseen video.
 
 The server A/B test for the optimized in-memory execution path is documented in
 `delivery/docs/TIME_OPTIMIZATION_SERVER_TEST.md`. It compares the legacy
@@ -333,15 +345,25 @@ Expected model directories:
 SMPLest-X-Inference/
 WiLoR-Inference/
 EMOCA-Inference/
-signlanguage_global_correction_server/models/SMPLX_FEMALE.npz
+SMPLest-X-Inference/human_models/human_model_files/smplx/
+  SMPLX_NEUTRAL.npz
+  SMPLX_FEMALE.npz
 ```
 
 Post-processor checkpoints used by the current final pipeline:
 
 ```text
-outputs_fusion_signlanguage_no_stablized/evaluation/global_correction_model_upper_r1/best_model.pt
-/project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs/evaluation/hand_correction_model_wrist_fingers_r1/best_model.pt
-/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/evaluation/2d_guided_upperbody_model_r1/best_model.pt
+delivery/models/correctors/global/best_model.pt
+delivery/models/correctors/hand/best_model.pt
+delivery/models/correctors/upper2d/best_model.pt
+```
+
+On the experiment server, install the verified outputs and checkpoints into
+the portable delivery tree with:
+
+```bash
+bash delivery/scripts/install_server_delivery_assets.sh
+bash delivery/scripts/verify_delivery_readiness.sh
 ```
 
 Precompute YOLO keypoints once for repeatable accurate-mode timing:
@@ -374,6 +396,8 @@ delivery/scripts/
 delivery/docs/
 delivery/results/
 delivery/sample/
+delivery/final_outputs/
+delivery/models/correctors/
 tools/postprocessing/
 tools/evaluation/
 tools/preprocessing/

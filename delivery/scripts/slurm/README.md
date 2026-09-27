@@ -152,9 +152,21 @@ sbatch delivery/scripts/slurm/samples/generate_ablation_samples.sh
 | --- | --- |
 | `testing/test_integrated_pipeline.sh` | Smoke-test the base integrated pipeline and expected output structure. |
 | `testing/test_final_postprocessed_pipeline.sh` | Smoke-test the complete corrected pipeline and final artifacts. |
+| `testing/test_packaged_delivery.sh` | Extract the final archive in a clean directory, verify assets/imports, and optionally run the accurate sample pipeline. |
 
 Run the tests before benchmarks after changing a model, environment, or server
 checkout.
+
+Run the clean-package test after building the final archive:
+
+```bash
+PACKAGE_ARCHIVE=/absolute/path/to/Video2Smplx_document_set_<STAMP>.tar.gz \
+RUN_FULL_PIPELINE=1 \
+sbatch delivery/scripts/slurm/testing/test_packaged_delivery.sh
+```
+
+Licensed base-model repositories are linked from `SOURCE_REPO`; they are not
+copied into the delivery archive.
 
 ## Runtime Outputs
 

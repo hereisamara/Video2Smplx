@@ -20,7 +20,7 @@ PYTHON="conda run --no-capture-output -n video2smplx_shared310 python"
 
 VIDEO_DIR="${VIDEO_DIR:-datasets/videos/SignLanguage}"
 ANNOTATION_DIR="${ANNOTATION_DIR:-datasets/annotations/SignLanguage}"
-MODEL_PATH="${MODEL_PATH:-signlanguage_global_correction_server/models/SMPLX_FEMALE.npz}"
+MODEL_PATH="${MODEL_PATH:-SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz}"
 
 BEFORE_ROOT="${BEFORE_ROOT:-/project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs}"
 BEFORE_SUBDIR="${BEFORE_SUBDIR:-fused_params_model_global_hand_corrected}"

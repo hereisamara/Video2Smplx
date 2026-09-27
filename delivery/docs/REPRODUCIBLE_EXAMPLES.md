@@ -91,9 +91,9 @@ Optional overrides:
 SEQUENCE=SignLanguage_S3 \
 RUN_ROOT=/project/lt200246-mmacma/khtun/video2smplx_delivery_final_test \
 YOLO_MODEL=/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/models/yolov8x-pose.pt \
-GLOBAL_CKPT=outputs_fusion_signlanguage_no_stablized/evaluation/global_correction_model_upper_r1/best_model.pt \
-HAND_CKPT=/project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs/evaluation/hand_correction_model_wrist_fingers_r1/best_model.pt \
-UPPER2D_CKPT=/project/lt200246-mmacma/khtun/signlanguage_2d_guided_upperbody_outputs/evaluation/2d_guided_upperbody_model_r1/best_model.pt \
+GLOBAL_CKPT=delivery/models/correctors/global/best_model.pt \
+HAND_CKPT=delivery/models/correctors/hand/best_model.pt \
+UPPER2D_CKPT=delivery/models/correctors/upper2d/best_model.pt \
 sbatch delivery/scripts/slurm/testing/test_final_postprocessed_pipeline.sh
 ```
 

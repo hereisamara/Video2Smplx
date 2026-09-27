@@ -107,6 +107,22 @@ Runtime is measured empirically on the allocated server GPU because the final
 pipeline combines several external networks, Python preprocessing, file I/O,
 SMPL-X forward passes, and offscreen rendering.
 
+Measured runtime scopes:
+
+| Scope | Result |
+| --- | ---: |
+| SMPLest-X-only normal working throughput after initialization and warm-up | 19.59 FPS |
+| Full SMPLest-X/WiLoR/EMOCA/fusion steady model schedule | 6.76 FPS |
+| Accurate final pipeline excluding initial loading and rendering | 3.57 FPS |
+| Accurate end-to-end run with rendering and precomputed keypoints | 1.98 FPS |
+| YOLOv8x-pose keypoint preprocessing | 3.35 FPS |
+| Learned correction stack with precomputed keypoints | 13.10 ms/frame |
+
+These values describe different boundaries and are not interchangeable. In
+particular, the SMPLest-X-only number does not include hand, face, fusion,
+correction, export, or rendering. The final-pipeline result uses precomputed
+YOLO keypoints; the detector cost is reported separately.
+
 Use:
 
 ```bash

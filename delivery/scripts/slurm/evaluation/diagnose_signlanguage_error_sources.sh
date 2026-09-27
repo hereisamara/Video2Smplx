@@ -23,7 +23,7 @@ PYTHON="conda run --no-capture-output -n video2smplx_shared310 python"
 # Override these at sbatch time to diagnose raw/fused/global-only outputs.
 PRED_ROOT="${PRED_ROOT:-/project/lt200246-mmacma/khtun/signlanguage_hand_correction_outputs}"
 PARAMS_SUBDIR="${PARAMS_SUBDIR:-fused_params_model_global_hand_corrected}"
-MODEL_PATH="${MODEL_PATH:-signlanguage_global_correction_server/models/SMPLX_FEMALE.npz}"
+MODEL_PATH="${MODEL_PATH:-SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz}"
 OUTPUT_DIR="${OUTPUT_DIR:-${PRED_ROOT}/evaluation/error_sources_${PARAMS_SUBDIR}}"
 BATCH_SIZE="${BATCH_SIZE:-16}"
 FRAME_STRIDE="${FRAME_STRIDE:-1}"
