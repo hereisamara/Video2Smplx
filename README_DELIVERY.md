@@ -273,7 +273,7 @@ in-domain comparison, not as an official UBody leaderboard entry.
 | AiOS | UBody | 58.6 | 32.5 | 39.0 | 7.3 | 19.6 | 2.8 |
 | SMPLer-X-L20 finetuned | UBody | 57.4 | 31.9 | 40.2 | 10.3 | 21.6 | 2.8 |
 | SMPLest-X-H40 | UBody | 51.1 | 27.8 | 32.9 | 7.9 | 21.4 | 2.5 |
-| Ours, 2D upper scale 0.75 | UBody SignLanguage section | 54.11 | 28.55 | 29.52 | 5.15 | 12.63 | not reported in this run |
+| Ours, 2D upper scale 0.75 | UBody SignLanguage section | 54.11 | 28.55 | 29.52 | 5.15 | 12.63 | 2.24 |
 
 Sources:
 
