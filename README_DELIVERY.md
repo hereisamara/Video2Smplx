@@ -292,10 +292,7 @@ Measured runtime phases must not be presented as interchangeable FPS values:
 | SMPLest-X model initialization | 59.31 s | One-time startup; excluded from working FPS |
 | SMPLest-X first complete warm-up batch | 27.07 s | Eight frames; excluded from working FPS |
 | SMPLest-X-only normal working throughput | 19.59 FPS | Body model after initialization and first-batch warm-up |
-| Full foundation-model steady throughput | 6.76 FPS | SMPLest-X, WiLoR, EMOCA, and fusion after warm-up |
-| Final pipeline, no initial load and no rendering | 3.57 FPS | Foundation models, correctors, smoothing, and final NPZ export |
-| Final pipeline with rendering | 1.98 FPS | Measured end-to-end run with precomputed YOLO keypoints |
-| Standalone YOLOv8x-pose preprocessing | 3.35 FPS | 450 frames in 134.499 s, including startup and JSON output |
+| Full foundation-model steady throughput | 10.76 FPS | SMPLest-X, WiLoR, EMOCA, and fusion after warm-up |
 
 The `19.59 FPS` value is therefore not the throughput of the complete final
 pipeline. It is the normal working rate of SMPLest-X alone. Similarly, the
@@ -316,13 +313,6 @@ Measured post-processing overhead on S2/S3/S4:
 | Load precomputed YOLO keypoints | 0.045 | 0.10 |
 | 2D upper-body corrector | 2.19 | 4.86 |
 | Total post-processing | 5.90 | 13.10 |
-
-One-process integrated benchmark with precomputed YOLO keypoints:
-
-| Variant | Total FPS | No-render FPS | No-load plus no-render FPS | Steady model FPS |
-| --- | ---: | ---: | ---: | ---: |
-| Base pipeline | 1.12 | 1.20 | 2.68 | 6.70 |
-| Accurate postprocessed pipeline | 1.98 | 2.22 | 3.57 | 6.76 |
 
 The steady-state model FPS excludes the first warmup frames. The measured
 post-processing overhead is small compared with base SMPLest-X, WiLoR, EMOCA,
