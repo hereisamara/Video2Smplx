@@ -601,7 +601,7 @@ comparison and not an official whole-UBody leaderboard entry.
 | AiOS | UBody | 58.6 | 32.5 | 39.0 | 7.3 | 19.6 | 2.8 |
 | SMPLer-X-L20 finetuned | UBody | 57.4 | 31.9 | 40.2 | 10.3 | 21.6 | 2.8 |
 | SMPLest-X-H40 | UBody | 51.1 | 27.8 | 32.9 | 7.9 | 21.4 | 2.5 |
-| Ours, scale 0.75 | UBody SignLanguage section | 54.11 | 28.55 | 29.52 | 5.15 | 12.63 | not reported |
+| Ours, scale 0.75 | UBody SignLanguage section | 54.11 | 28.55 | 29.52 | 5.15 | 12.63 | 2.24 |
 
 Machine-readable result tables are under `delivery/results/`.
 
@@ -646,9 +646,6 @@ FPS values below measure different boundaries and must not be interchanged.
 | --- | ---: | --- |
 | SMPLest-X normal working throughput | 19.59 FPS | Body only, batch mode, startup and first batch excluded |
 | Full foundation-model steady throughput | 10.76 FPS | SMPLest-X, WiLoR, EMOCA, and fusion after warm-up |
-| Accurate pipeline without initial load or rendering | 3.57 FPS | Foundation models, correction, smoothing, NPZ export, precomputed keypoints |
-| Accurate pipeline with rendering | 1.98 FPS | End-to-end with precomputed keypoints |
-| YOLOv8x-pose preprocessing | 3.35 FPS | Detector startup, inference, and JSON output |
 | Learned correction stack | 13.10 ms/frame | Global, hand, keypoint load, and upper-body correctors |
 
 The latest clean-package run separately recorded `7.68 FPS` for the warm
@@ -660,125 +657,7 @@ Run repeatable benchmarks with the jobs under
 `delivery/scripts/slurm/benchmarks/`. Do not report the `19.59 FPS` body-only
 value as complete-pipeline throughput.
 
-## 14. Delivery Packages and Drive Folder
-
-Large model weights should not be committed to GitHub. The final delivery uses
-separate source/document, model, and sample-output packages.
-
-### Drive links
-
-Update this table after uploading the server packages to the delivery Drive
-folder:
-
-| Package | Expected filename | Drive link | Status |
-| --- | --- | --- | --- |
-| Source code and documentation | `Video2Smplx_document_set_<STAMP>.tar.gz` | `TODO: add Drive link` | Pending upload |
-| Licensed runtime models | `Video2Smplx_runtime_models_<STAMP>.tar` | `TODO: add Drive link` | Pending upload |
-| Verified final sample outputs | `Video2Smplx_final_outputs_<STAMP>.tar.gz` | `TODO: add Drive link` | Pending upload |
-| Complete flash-drive layout | `Video2Smplx_delivery/` | `TODO: add Drive folder link` | Pending assembly |
-
-After building the packages on LANTA, verify and download them from the local
-workstation before uploading to Drive:
-
-```bash
-# On LANTA
-cd /project/lt200246-mmacma/khtun/video2smplx_delivery_release
-sha256sum Video2Smplx_document_set_*.tar.gz \
-  Video2Smplx_runtime_models_*.tar \
-  Video2Smplx_final_outputs_*.tar.gz > DELIVERY_SHA256SUMS.txt
-
-# On the local workstation
-scp 'khtun@lanta.nstda.or.th:/project/lt200246-mmacma/khtun/video2smplx_delivery_release/Video2Smplx_document_set_*.tar.gz' ~/Downloads/
-scp 'khtun@lanta.nstda.or.th:/project/lt200246-mmacma/khtun/video2smplx_delivery_release/Video2Smplx_runtime_models_*.tar' ~/Downloads/
-scp 'khtun@lanta.nstda.or.th:/project/lt200246-mmacma/khtun/video2smplx_delivery_release/Video2Smplx_final_outputs_*.tar.gz' ~/Downloads/
-scp khtun@lanta.nstda.or.th:/project/lt200246-mmacma/khtun/video2smplx_delivery_release/DELIVERY_SHA256SUMS.txt ~/Downloads/
-```
-
-Upload the three archives and `DELIVERY_SHA256SUMS.txt` to the delivery Drive
-folder, retain their original filenames, then replace the `TODO` entries above
-with share links. If the model archive is split for FAT32, upload every
-`.part-*` file and the checksum file together.
-
-### Build the source/document package
-
-```bash
-bash delivery/scripts/build_document_set.sh \
-  /project/lt200246-mmacma/khtun/video2smplx_delivery_release
-```
-
-### Build the licensed model package
-
-Run only when the recipient is authorized under every included model license:
-
-```bash
-ACKNOWLEDGE_RESTRICTED_MODEL_LICENSES=1 \
-MODEL_SOURCE_ROOT=/home/khtun/video2simplx/Video2SmplxPy10/Video2Smplx \
-CORRECTOR_SOURCE_ROOT=/home/khtun/video2simplx/Video2SmplxPy10/Video2Smplx \
-YOLO_POSE_MODEL=/absolute/path/to/yolov8x-pose.pt \
-COMPRESSION=none \
-bash delivery/scripts/package_runtime_models.sh \
-  /project/lt200246-mmacma/khtun/video2smplx_delivery_release
-```
-
-The model package preserves repository-relative paths, includes SHA-256
-checksums, and is approximately 14 GB. For FAT32 media, use `SPLIT_SIZE=3900M`.
-
-### Build the verified final-output package
-
-```bash
-bash delivery/scripts/package_final_outputs.sh \
-  /project/lt200246-mmacma/khtun/video2smplx_delivery_release
-```
-
-This archive contains `delivery/final_outputs/`, the compact sample media,
-committed result tables, the root README, and SHA-256 checksums.
-
-### Install verified server assets
-
-```bash
-bash delivery/scripts/install_server_delivery_assets.sh
-bash delivery/scripts/verify_delivery_readiness.sh
-```
-
-The installer copies the three learned correctors and one verified final run
-into portable delivery locations.
-
-### Build the flash-drive layout
-
-```bash
-MODEL_BUNDLE_PATH=/absolute/path/to/Video2Smplx_runtime_models_<STAMP>.tar \
-bash delivery/scripts/prepare_flash_drive_set.sh /path/to/flash-drive-folder
-```
-
-Upload package files from the server only after verification. Preserve the
-generated checksums beside the uploaded archives and record their Drive links
-in the table above.
-
-## 15. Limitations
-
-- Correctors were trained for SignLanguage-style data; generalization to other
-  datasets has not been established.
-- The 2D-guided corrector depends on detector quality, visibility, and camera
-  framing.
-- Whole-body MPVPE includes lower-body vertices that may be invisible in
-  upper-body sign-language videos.
-- Complete inference requires NVIDIA CUDA and licensed third-party assets.
-- Online YOLO pose and synchronous rendering reduce end-to-end FPS.
-- Published UBody comparisons are not fully equivalent unless split, gender,
-  region definitions, and alignment protocol match exactly.
-- Specialist-output speed options require final output-equivalence validation.
-
-## 16. Future Work
-
-- Validate the learned correctors on Signify and additional sign-language
-  datasets.
-- Train visibility-aware losses that prioritize observed upper-body regions.
-- Improve asynchronous hand, face, YOLO, and rendering execution.
-- Quantize or compile specialist estimators after accuracy-equivalence tests.
-- Add uncertainty-based correction gating for detector failures and occlusion.
-- Evaluate stronger whole-body backbones under the same SignLanguage protocol.
-
-## 17. Citation and References
+## 14. Citation and References
 
 Key upstream projects:
 
@@ -798,17 +677,3 @@ When publishing results, cite the upstream methods used and describe this
 project's values as held-out UBody SignLanguage-section results, not official
 whole-UBody leaderboard values.
 
-## 18. License and Authors
-
-Project maintainer: **Khin Eaindray Htun**
-
-Repository contributors include **uStein**.
-
-The project source and each upstream component remain subject to their
-respective licenses. SMPL-X, MANO, FLAME, EMOCA, SMPLest-X, WiLoR,
-Ultralytics, and associated weights may restrict commercial use or
-redistribution. Registration or explicit acceptance of model licenses may be
-required.
-
-The model-packaging acknowledgement flag records an intentional packaging
-decision. It does not grant redistribution rights.
