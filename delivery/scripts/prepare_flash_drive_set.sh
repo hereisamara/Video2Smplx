@@ -20,17 +20,26 @@ cp -R "${DELIVERY_DIR}" "${TARGET}/delivery"
 cp -R "${ROOT_DIR}/tools" "${TARGET}/tools"
 cp -R "${ROOT_DIR}/video2smplx" "${TARGET}/video2smplx"
 cp -R "${ROOT_DIR}/requirements" "${TARGET}/requirements"
+cp -R "${ROOT_DIR}/tests" "${TARGET}/tests"
 cp "${ROOT_DIR}/zero_filter_render.py" "${TARGET}/zero_filter_render.py"
 cp "${ROOT_DIR}/smplestx_wilor_emoca_fuse.py" "${TARGET}/smplestx_wilor_emoca_fuse.py"
-cp "${ROOT_DIR}/README_DELIVERY.md" "${TARGET}/README_DELIVERY.md"
-cp "${ROOT_DIR}/README_TOR.md" "${TARGET}/README_TOR.md"
-cp "${ROOT_DIR}/README_VIDEO_OUTPUT_COMPARISON.md" "${TARGET}/README_VIDEO_OUTPUT_COMPARISON.md"
 cp "${ROOT_DIR}/README.md" "${TARGET}/README.md"
 
-if [ -d "${ROOT_DIR}/docs/media/ablation_s2" ]; then
-  mkdir -p "${TARGET}/docs/media"
-  cp -R "${ROOT_DIR}/docs/media/ablation_s2" "${TARGET}/docs/media/ablation_s2"
-fi
+mkdir -p "${TARGET}/docs/media"
+cp -R "${ROOT_DIR}/docs/media/." "${TARGET}/docs/media/"
+
+rsync -a \
+  --exclude='.git/' --exclude='README.md' --exclude='__pycache__/' --exclude='outputs/' \
+  --exclude='pretrained_models/' \
+  --exclude='human_models/human_model_files/' \
+  "${ROOT_DIR}/SMPLest-X-Inference/" "${TARGET}/SMPLest-X-Inference/"
+rsync -a \
+  --exclude='.git/' --exclude='README.md' --exclude='__pycache__/' \
+  --exclude='pretrained_models/' --exclude='mano_data/' \
+  "${ROOT_DIR}/WiLoR-Inference/" "${TARGET}/WiLoR-Inference/"
+rsync -a \
+  --exclude='.git/' --exclude='README.md' --exclude='__pycache__/' --exclude='assets/' \
+  "${ROOT_DIR}/EMOCA-Inference/" "${TARGET}/EMOCA-Inference/"
 
 if [ -n "${MODEL_BUNDLE_PATH}" ]; then
   if [ ! -e "${MODEL_BUNDLE_PATH}" ]; then

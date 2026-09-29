@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "sequence": "SignLanguage_S2",
+      "gif": "docs/media/gt_before_after_s2/SignLanguage_S2/SignLanguage_S2_gt_before_after_postprocessing.gif",
+      "sample_sheet": "docs/media/gt_before_after_s2/SignLanguage_S2/SignLanguage_S2_gt_before_after_postprocessing_samples.png",
+      "frames": 56,
+      "metadata": {
+        "video_path": "datasets/videos/SignLanguage/SignLanguage_S2/SignLanguage_S2.mp4",
+        "video_fps": 24.0,
+        "video_frames": 111,
+        "candidate_frames": 56,
+        "usable_pairs": 56,
+        "missing_gt": 0,
+        "stride": 2
+      }
+    }
+  ],
+  "selected_sequences": [
+    "SignLanguage_S2"
+  ],
+  "before_source": "docs/media/ablation_s2/base_no_stab/smplx_params.npz",
+  "after_source": "docs/media/ablation_s2/accurate_2d/smplx_params.npz",
+  "model_path": "artifacts/handover/signlanguage_global_correction_server/models/SMPLX_FEMALE.npz",
+  "alignment": "root",
+  "view": "front",
+  "tag": "gt_before_after_postprocessing",
+  "note": "Root-aligned unless alignment=world. Blue=GT, orange=before, green=after."
+}

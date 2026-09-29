@@ -104,6 +104,8 @@ class IntegratedPipelineHelpersTest(unittest.TestCase):
                 "3",
                 "--disable_wilor",
                 "--disable_emoca",
+                "--wilor_params_only",
+                "--emoca_expression_only",
             ]
         )
 
@@ -115,6 +117,8 @@ class IntegratedPipelineHelpersTest(unittest.TestCase):
         self.assertEqual(args.max_inflight_frames, 3)
         self.assertTrue(args.disable_wilor)
         self.assertTrue(args.disable_emoca)
+        self.assertTrue(args.wilor_params_only)
+        self.assertTrue(args.emoca_expression_only)
 
 
 if __name__ == "__main__":

@@ -61,6 +61,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-count", type=int, default=3)
     parser.add_argument("--random-seed", type=int, default=7)
     parser.add_argument("--annotation-fps", type=float, default=30.0)
+    parser.add_argument(
+        "--video-fps",
+        type=float,
+        default=None,
+        help="Override input video FPS. Useful when ffprobe is unavailable.",
+    )
     parser.add_argument("--max-frames", type=int, default=120)
     parser.add_argument("--stride", type=int, default=2)
     parser.add_argument("--panel-size", type=int, default=260)
@@ -125,7 +131,10 @@ def common_prediction_files(before_dir: Path, after_dir: Path) -> list[tuple[int
 
 def collect_pairs(args: argparse.Namespace, sequence: str, image_index: dict[str, list[dict]]) -> tuple[list[dict], dict]:
     video_path = args.video_dir / sequence / f"{sequence}.mp4"
-    fps, video_frames = video_metadata(video_path, find_ffprobe())
+    if args.video_fps is None:
+        fps, video_frames = video_metadata(video_path, find_ffprobe())
+    else:
+        fps, video_frames = args.video_fps, -1
     before_dir = args.before_root / sequence / args.before_subdir
     after_dir = args.after_root / sequence / args.after_subdir
     pred_files = common_prediction_files(before_dir, after_dir)

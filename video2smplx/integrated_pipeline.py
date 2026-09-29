@@ -236,6 +236,8 @@ def run_integrated_pipeline(
     smplestx_batch_size: int = 1,
     wilor_batch_size: int = 16,
     emoca_batch_size: int = 16,
+    wilor_params_only: bool = False,
+    emoca_expression_only: bool = False,
     smplestx_inference_mode: bool = False,
     smplestx_single_gpu_model: bool = False,
     parallel_models: bool = False,
@@ -366,6 +368,10 @@ def run_integrated_pipeline(
     print(f"  sx batch   : {max(1, smplestx_batch_size)}")
     print(f"  hand batch : {max(1, wilor_batch_size)}")
     print(f"  face batch : {max(1, emoca_batch_size)}")
+    if enable_wilor:
+        print(f"  hand output: {'MANO params only' if wilor_params_only else 'full WiLoR output'}")
+    if enable_emoca:
+        print(f"  face output: {'expression/pose only' if emoca_expression_only else 'full EMOCA encode'}")
     print(f"  sx infer   : {'inference_mode' if smplestx_inference_mode else 'no_grad'}")
     print(f"  sx model   : {'single GPU module' if smplestx_single_gpu_model else 'DataParallel wrapper'}")
     print(f"  model exec : {model_execution_mode}")
@@ -408,6 +414,7 @@ def run_integrated_pipeline(
             device=device,
             detector_stride=wilor_detector_stride,
             batch_size=wilor_batch_size,
+            params_only=wilor_params_only,
         )
         _add_step_timing(step_timings, "load_wilor", step_start)
     if enable_emoca:
@@ -419,6 +426,7 @@ def run_integrated_pipeline(
             device=device,
             detector_stride=emoca_detector_stride,
             batch_size=emoca_batch_size,
+            expression_only=emoca_expression_only,
         )
         _add_step_timing(step_timings, "load_emoca", step_start)
 
@@ -993,6 +1001,10 @@ def run_integrated_pipeline(
             "wilor_mano": bool(enable_wilor),
             "emoca": bool(enable_emoca),
         },
+        "specialist_output_optimization": {
+            "wilor_params_only": bool(wilor_params_only),
+            "emoca_expression_only": bool(emoca_expression_only),
+        },
         "fused_params_written": bool(write_fused_params),
         "parallel_model_workers": PARALLEL_MODEL_WORKERS if parallel_models else 0,
         "render_total_sec": None,
@@ -1271,6 +1283,10 @@ def run_integrated_pipeline(
             "wilor": max(1, int(wilor_batch_size)),
             "emoca": max(1, int(emoca_batch_size)),
         },
+        "specialist_output_optimization": {
+            "wilor_params_only": bool(wilor_params_only),
+            "emoca_expression_only": bool(emoca_expression_only),
+        },
         "auxiliary_detector_optimization": {
             "wilor_detector_stride": max(1, wilor_detector_stride),
             "emoca_detector_stride": max(1, emoca_detector_stride),
@@ -1425,6 +1441,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run EMOCA face detection every N frames and reuse the crop between detections.",
     )
     parser.add_argument(
+        "--wilor_params_only",
+        action="store_true",
+        help=(
+            "Return refined MANO parameters without final WiLoR vertices, "
+            "joints, or 2D projection. Intended for parameter fusion."
+        ),
+    )
+    parser.add_argument(
+        "--emoca_expression_only",
+        action="store_true",
+        help=(
+            "Run EMOCA's coarse FLAME encoder only and skip unused detail-code "
+            "inference. Intended for expression and jaw-pose fusion."
+        ),
+    )
+    parser.add_argument(
         "--smplestx_inference_mode",
         action="store_true",
         help="Use torch.inference_mode() for SMPLest-X forward instead of torch.no_grad().",
@@ -1552,6 +1584,8 @@ def main() -> None:
         smplestx_batch_size=args.smplestx_batch_size,
         wilor_batch_size=args.wilor_batch_size,
         emoca_batch_size=args.emoca_batch_size,
+        wilor_params_only=args.wilor_params_only,
+        emoca_expression_only=args.emoca_expression_only,
         smplestx_inference_mode=args.smplestx_inference_mode,
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,
         parallel_models=args.parallel_models,

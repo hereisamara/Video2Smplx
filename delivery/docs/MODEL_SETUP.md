@@ -95,8 +95,8 @@ delivery/models/correctors/upper2d/best_model.pt
 Run `delivery/scripts/install_server_delivery_assets.sh` from the repository
 root on the training server to copy the verified checkpoints and final sample
 outputs into these portable delivery locations. The script also writes SHA-256
-checksums. The corrector provenance and original server locations are documented
-in `delivery/models/correctors/README.md`.
+checksums. The corrector roles and portable package layout are documented in
+the repository-root `README.md`.
 
 The licensed SMPL-X model is not copied into `delivery/`. Its runtime location
 is:
@@ -106,7 +106,8 @@ SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz
 ```
 
 Use the matching programs under `tools/postprocessing/` when reproducing the
-corrected benchmark pipeline.
+corrected benchmark pipeline. Corrector roles, selected settings, and package
+instructions are summarized in the repository-root `README.md`.
 
 ## Separate Physical Model Package
 

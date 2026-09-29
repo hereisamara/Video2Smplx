@@ -19,6 +19,8 @@ SOURCE_REPO="${SOURCE_REPO:-/home/khtun/video2simplx/Video2SmplxPy10/Video2Smplx
 PACKAGE_ARCHIVE="${PACKAGE_ARCHIVE:?Set PACKAGE_ARCHIVE to the final Video2Smplx_document_set_*.tar.gz}"
 TEST_ROOT="${TEST_ROOT:-/project/lt200246-mmacma/khtun/video2smplx_clean_package_test_${SLURM_JOB_ID:-manual}}"
 RUN_FULL_PIPELINE="${RUN_FULL_PIPELINE:-1}"
+EXECUTION_MODE="${EXECUTION_MODE:-batch}"
+MAX_INFLIGHT_FRAMES="${MAX_INFLIGHT_FRAMES:-2}"
 YOLO_MODEL="${YOLO_MODEL:-${SOURCE_REPO}/yolov8x-pose.pt}"
 EVAL_MODEL="${EVAL_MODEL:-${SOURCE_REPO}/SMPLest-X-Inference/human_models/human_model_files/smplx/SMPLX_FEMALE.npz}"
 
@@ -67,12 +69,15 @@ if [ "${RUN_FULL_PIPELINE}" = "1" ]; then
   done
 
   echo "[run] full accurate pipeline on bundled sample"
+  echo "[run] execution mode: ${EXECUTION_MODE}"
   "${PYTHON[@]}" delivery/source/integrated_postprocessed_pipeline_cli.py \
     --video delivery/sample/input-sample.mp4 \
     --output "${TEST_ROOT}/sample_run" \
     --name SignLanguage_S2 \
     --sequence SignLanguage_S2 \
     --device cuda \
+    --execution-mode "${EXECUTION_MODE}" \
+    --max-inflight-frames "${MAX_INFLIGHT_FRAMES}" \
     --postprocess-mode accurate \
     --global-ckpt delivery/models/correctors/global/best_model.pt \
     --hand-ckpt delivery/models/correctors/hand/best_model.pt \
@@ -81,13 +86,16 @@ if [ "${RUN_FULL_PIPELINE}" = "1" ]; then
     --yolo-model "${YOLO_MODEL}" \
     --smplestx-detector-stride 5 \
     --smplestx-batch-size 8 \
+    --wilor-batch-size 16 \
+    --emoca-batch-size 16 \
     --smplestx-inference-mode \
     --smplestx-single-gpu-model \
-    --parallel-models
+    --fast-io
 
-  test -s "${TEST_ROOT}/sample_run/smplx_params.npz"
-  test -s "${TEST_ROOT}/sample_run/rendered/smplx_render.mp4"
-  test -s "${TEST_ROOT}/sample_run/side_by_side_input_render.mp4"
+  FINAL_DIR="${TEST_ROOT}/sample_run/final_postprocessed"
+  test -s "${FINAL_DIR}/smplx_params.npz"
+  test -s "${FINAL_DIR}/rendered/smplx_render.mp4"
+  test -s "${FINAL_DIR}/side_by_side_input_render.mp4"
   test -s "${TEST_ROOT}/sample_run/runtime/integrated_postprocessed_runtime_report.json"
 fi
 

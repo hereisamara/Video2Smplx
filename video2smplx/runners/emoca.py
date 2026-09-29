@@ -27,6 +27,7 @@ class EMOCARunner:
         face_detector_threshold: float = 0.5,
         detector_stride: int = 1,
         batch_size: int = 16,
+        expression_only: bool = False,
     ):
         self.project_dir = Path(project_dir).resolve()
         self.model_name = model_name
@@ -34,6 +35,7 @@ class EMOCARunner:
         self.scale = scale
         self.batch_size = max(1, int(batch_size))
         self.detector_stride = max(1, int(detector_stride))
+        self.expression_only = bool(expression_only)
         self._cached_face_bbox: tuple[float, float, float, float, Any] | None = None
         self.device = torch.device(device if device == "cuda" and torch.cuda.is_available() else "cpu")
         bundled_torch_home = self.project_dir.parent / "runtime_model_cache" / "torch"
@@ -85,6 +87,24 @@ class EMOCARunner:
             self.emoca = self.emoca.to(self.device)
             self.emoca.eval()
             self.face_detector = FAN(device=str(self.device), threshold=face_detector_threshold)
+
+    def _encode(self, image_batch: torch.Tensor) -> dict[str, Any]:
+        if not self.expression_only:
+            return self.emoca.encode({"image": image_batch}, training=False)
+
+        # SMPL-X fusion uses expression and jaw pose from the coarse FLAME
+        # encoder. The detail encoder produces displacement codes that are not
+        # consumed by this pipeline, so omit it in this opt-in path.
+        code, _ = self.emoca._encode_flame(image_batch)
+        shape, texture, expression, pose, camera, light = self.emoca._unwrap_list(code)
+        return {
+            "shapecode": shape,
+            "texcode": texture,
+            "expcode": expression,
+            "posecode": pose,
+            "cam": camera,
+            "lightcode": light,
+        }
 
     @staticmethod
     def empty_result() -> dict[str, Any]:
@@ -184,7 +204,7 @@ class EMOCARunner:
         batch = {"image": cropped.unsqueeze(0).to(self.device)}
 
         with torch.inference_mode():
-            vals = self.emoca.encode(batch, training=False)
+            vals = self._encode(batch["image"])
 
         return self._result_from_values(vals)
 
@@ -231,7 +251,7 @@ class EMOCARunner:
         for start in range(0, len(crops), self.batch_size):
             crop_batch = torch.stack(crops[start : start + self.batch_size]).to(self.device)
             with torch.inference_mode():
-                values = self.emoca.encode({"image": crop_batch}, training=False)
+                values = self._encode(crop_batch)
             batch_count = int(crop_batch.shape[0])
             for index in range(batch_count):
                 one_values = {}

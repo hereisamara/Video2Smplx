@@ -36,6 +36,8 @@ SAVE_FINAL_PKLS="${SAVE_FINAL_PKLS:-0}"
 SMPLESTX_BATCH_SIZE="${SMPLESTX_BATCH_SIZE:-8}"
 WILOR_BATCH_SIZE="${WILOR_BATCH_SIZE:-16}"
 EMOCA_BATCH_SIZE="${EMOCA_BATCH_SIZE:-16}"
+WILOR_PARAMS_ONLY="${WILOR_PARAMS_ONLY:-0}"
+EMOCA_EXPRESSION_ONLY="${EMOCA_EXPRESSION_ONLY:-0}"
 WARMUP_EXCLUDE_FRAMES="${WARMUP_EXCLUDE_FRAMES:-2}"
 WARMUP_EXCLUDE_BATCHES="${WARMUP_EXCLUDE_BATCHES:-1}"
 YOLO_KEYPOINTS="${YOLO_KEYPOINTS:-/project/lt200246-mmacma/khtun/video2smplx_integrated_oneprocess_benchmark_prekeypoints/evaluation/precomputed_yolo_pose_keypoints.json}"
@@ -73,6 +75,12 @@ else
   if [ "${ENABLE_EMOCA}" != "1" ]; then
     ARGS+=(--disable-emoca)
   fi
+  if [ "${WILOR_PARAMS_ONLY}" = "1" ]; then
+    ARGS+=(--wilor-params-only)
+  fi
+  if [ "${EMOCA_EXPRESSION_ONLY}" = "1" ]; then
+    ARGS+=(--emoca-expression-only)
+  fi
   if [ "${POSTPROCESS_MODE}" = "none" ]; then
     ARGS+=(--disable-postprocessing)
   else
@@ -105,6 +113,7 @@ echo "[config] video=${VIDEO}"
 echo "[config] output=${OUTPUT}"
 echo "[config] execution=${EXECUTION_MODE} inflight=${MAX_INFLIGHT_FRAMES}"
 echo "[config] smplestx_only=${SMPLESTX_ONLY} wilor=${ENABLE_WILOR} emoca=${ENABLE_EMOCA}"
+echo "[config] wilor_params_only=${WILOR_PARAMS_ONLY} emoca_expression_only=${EMOCA_EXPRESSION_ONLY}"
 echo "[config] postprocess=${POSTPROCESS_MODE} smoothing=${ENABLE_SMOOTHING} zero_translation=${ZERO_TRANSLATION}"
 echo "[config] render=${ENABLE_RENDER} save_final_pkls=${SAVE_FINAL_PKLS}"
 echo "[config] warmup_exclude_frames=${WARMUP_EXCLUDE_FRAMES} warmup_exclude_batches=${WARMUP_EXCLUDE_BATCHES}"

@@ -67,6 +67,11 @@ def main() -> None:
     parser.add_argument("--crop-size", type=int, default=224)
     parser.add_argument("--scale", type=float, default=1.25)
     parser.add_argument("--face-detector-threshold", type=float, default=0.5)
+    parser.add_argument(
+        "--expression-only",
+        action="store_true",
+        help="Skip EMOCA detail-code inference and retain expression and pose outputs.",
+    )
     args = parser.parse_args()
 
     output = Path(args.output).resolve()
@@ -82,6 +87,7 @@ def main() -> None:
         crop_size=args.crop_size,
         scale=args.scale,
         face_detector_threshold=args.face_detector_threshold,
+        expression_only=args.expression_only,
     )
 
     started = time.perf_counter()

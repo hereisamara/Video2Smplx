@@ -131,6 +131,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--smplestx-batch-size", type=int, default=8)
     parser.add_argument("--wilor-batch-size", type=int, default=16)
     parser.add_argument("--emoca-batch-size", type=int, default=16)
+    parser.add_argument(
+        "--wilor-params-only",
+        action="store_true",
+        help="Skip final WiLoR vertices, joints, and projection after refined MANO parameters.",
+    )
+    parser.add_argument(
+        "--emoca-expression-only",
+        action="store_true",
+        help="Skip EMOCA detail-code inference and retain coarse expression and pose outputs.",
+    )
     parser.add_argument("--smplestx-inference-mode", action="store_true", default=True)
     parser.add_argument("--no-smplestx-inference-mode", dest="smplestx_inference_mode", action="store_false")
     parser.add_argument("--smplestx-single-gpu-model", action="store_true", default=True)
@@ -1075,6 +1085,8 @@ def main() -> None:
             "smplestx": True,
             "wilor_mano": not args.disable_wilor,
             "emoca": not args.disable_emoca,
+            "wilor_params_only": args.wilor_params_only,
+            "emoca_expression_only": args.emoca_expression_only,
             "learned_postprocessors": not args.disable_postprocessing,
             "zero_translation": not args.disable_zero_translation,
             "smoothing": not args.disable_smoothing,
@@ -1109,6 +1121,8 @@ def main() -> None:
         smplestx_batch_size=args.smplestx_batch_size,
         wilor_batch_size=args.wilor_batch_size,
         emoca_batch_size=args.emoca_batch_size,
+        wilor_params_only=args.wilor_params_only,
+        emoca_expression_only=args.emoca_expression_only,
         smplestx_inference_mode=args.smplestx_inference_mode,
         smplestx_single_gpu_model=args.smplestx_single_gpu_model,
         parallel_models=args.parallel_models,

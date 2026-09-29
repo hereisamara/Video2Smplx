@@ -34,9 +34,9 @@ for path in \
   delivery/source/face_estimation_cli.py \
   delivery/source/combine_smooth_render_cli.py \
   delivery/source/integrated_postprocessed_pipeline_cli.py \
-  delivery/docs/INSTALLATION.md \
+  README.md \
+  delivery/docs/FINAL_DELIVERY_REPORT.md \
   delivery/docs/MODEL_SETUP.md \
-  delivery/docs/USER_DOCUMENTATION.md \
   delivery/docs/TECHNICAL_STUDY_REPORT.md \
   delivery/sample/input-sample.mp4 \
   delivery/sample/output-sample.mp4; do

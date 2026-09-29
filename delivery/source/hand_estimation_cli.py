@@ -65,6 +65,11 @@ def main() -> None:
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--rescale-factor", type=float, default=2.0)
+    parser.add_argument(
+        "--params-only",
+        action="store_true",
+        help="Skip final WiLoR vertices, joints, and projection after MANO regression.",
+    )
     args = parser.parse_args()
 
     output = Path(args.output).resolve()
@@ -78,6 +83,7 @@ def main() -> None:
         device=args.device,
         rescale_factor=args.rescale_factor,
         batch_size=args.batch_size,
+        params_only=args.params_only,
     )
 
     started = time.perf_counter()

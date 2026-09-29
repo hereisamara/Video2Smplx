@@ -22,12 +22,14 @@ class WiLoRRunner:
         rescale_factor: float = 2.0,
         batch_size: int = 16,
         detector_stride: int = 1,
+        params_only: bool = False,
     ):
         self.project_dir = Path(project_dir).resolve()
         self.device_name = device
         self.rescale_factor = rescale_factor
         self.batch_size = batch_size
         self.detector_stride = max(1, int(detector_stride))
+        self.params_only = bool(params_only)
         self._cached_boxes: np.ndarray | None = None
         self._cached_handedness: np.ndarray | None = None
         require_files(
@@ -64,6 +66,51 @@ class WiLoRRunner:
             self.model = self.model.to(self.device)
             self.detector = self.detector.to(self.device)
             self.model.eval()
+
+    def _forward(self, batch: dict[str, Any]) -> dict[str, Any]:
+        if not self.params_only:
+            return self.model(batch)
+
+        # Fusion consumes only refined MANO parameters. Preserve the WiLoR
+        # backbone, temporary MANO mesh, and refinement network while skipping
+        # the final MANO mesh/joint decode and 2D projection.
+        x = batch["img"]
+        batch_size = int(x.shape[0])
+        temp_params, pred_cam, pred_feats, vit_out = self.model.backbone(
+            x[:, :, :, 32:-32]
+        )
+        device = temp_params["hand_pose"].device
+        dtype = temp_params["hand_pose"].dtype
+        focal_length = self.model.cfg.EXTRA.FOCAL_LENGTH * self.torch.ones(
+            batch_size,
+            2,
+            device=device,
+            dtype=dtype,
+        )
+        temp_params["global_orient"] = temp_params["global_orient"].reshape(
+            batch_size, -1, 3, 3
+        )
+        temp_params["hand_pose"] = temp_params["hand_pose"].reshape(
+            batch_size, -1, 3, 3
+        )
+        temp_params["betas"] = temp_params["betas"].reshape(batch_size, -1)
+        temp_mano = self.model.mano(
+            **{key: value.float() for key, value in temp_params.items()},
+            pose2rot=False,
+        )
+        pred_params, pred_cam = self.model.refine_net(
+            vit_out,
+            temp_mano.vertices,
+            pred_cam,
+            pred_feats,
+            focal_length,
+        )
+        return {
+            "pred_cam": pred_cam,
+            "pred_mano_params": {
+                key: value.clone() for key, value in pred_params.items()
+            },
+        }
 
     @staticmethod
     def empty_result() -> dict[str, Any]:
@@ -137,7 +184,7 @@ class WiLoRRunner:
         for batch in dataloader:
             batch = self.recursive_to(batch, self.device)
             with self.torch.inference_mode():
-                out = self.model(batch)
+                out = self._forward(batch)
 
             batch_size = batch["img"].shape[0]
             for n in range(batch_size):
@@ -217,7 +264,7 @@ class WiLoRRunner:
         for batch in dataloader:
             batch = self.recursive_to(batch, self.device)
             with self.torch.inference_mode():
-                out = self.model(batch)
+                out = self._forward(batch)
             batch_count = int(batch["img"].shape[0])
             for index in range(batch_count):
                 frame_index = frame_indices[cursor + index]
