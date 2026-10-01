@@ -355,6 +355,10 @@ python delivery/source/integrated_postprocessed_pipeline_cli.py --help >/dev/nul
 
 Resolve every `[missing]` line from the model verifier before inference.
 
+The verified archive `Video2Smplx_runtime_models_20260930_000924.tar` already
+contains all three learned correctors at the paths listed above. Do not obtain
+or package separate copies of those checkpoints when using that archive.
+
 ## 7. How to Run
 
 ### 7.1 Final integrated pipeline
@@ -651,7 +655,21 @@ Run repeatable benchmarks with the jobs under
 `delivery/scripts/slurm/benchmarks/`. Do not report the `19.59 FPS` body-only
 value as complete-pipeline throughput.
 
-## 14. Citation and References
+## 14. Limitations
+
+- The learned post-processors were trained for upper-body sign-language
+  footage. Their accuracy is not established for unrelated domains, extreme
+  viewpoints, heavy occlusion, or multiple interacting people.
+- The integrated pipeline assumes one principal person. Specialist detectors
+  can fail when hands or faces are too small, blurred, or outside the frame.
+- Reported SignLanguage numbers use the documented held-out split and are not
+  official whole-UBody leaderboard results.
+- Runtime depends on GPU hardware, detector settings, batching, warm-up, video
+  resolution, and whether rendering and online YOLO pose are included.
+- SMPL-X, MANO, FLAME, and several estimator weights have separate licenses and
+  cannot be redistributed without the recipient's authorization.
+
+## 15. Citation and References
 
 Key upstream projects:
 
@@ -671,3 +689,13 @@ When publishing results, cite the upstream methods used and describe this
 project's values as held-out UBody SignLanguage-section results, not official
 whole-UBody leaderboard values.
 
+## 16. License and Authors
+
+Project integration and delivery preparation: **Khin Eaindray Htun**.
+
+This repository does not grant a single replacement license for bundled or
+referenced third-party projects and model assets. SMPLest-X, WiLoR, EMOCA,
+SMPL-X, MANO, FLAME, Ultralytics, and their dependencies remain subject to
+their respective licenses and citation requirements. Recipients must obtain
+the required permissions before using or redistributing the separate runtime
+model archive. See `delivery/docs/MODEL_SETUP.md` and the upstream links above.

@@ -2,46 +2,77 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DELIVERY_DIR="${ROOT_DIR}/delivery"
 OUT_DIR="${1:-${ROOT_DIR}/artifacts/delivery_packages}"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 
-if [ "${ALLOW_INCOMPLETE_DELIVERY:-0}" != "1" ]; then
-  bash "${ROOT_DIR}/delivery/scripts/verify_delivery_readiness.sh"
-fi
+required_source_files=(
+  "README.md"
+  "delivery/source/body_estimation_cli.py"
+  "delivery/source/hand_estimation_cli.py"
+  "delivery/source/face_estimation_cli.py"
+  "delivery/source/combine_smooth_render_cli.py"
+  "delivery/source/integrated_postprocessed_pipeline_cli.py"
+  "delivery/docs/FINAL_DELIVERY_REPORT.md"
+  "delivery/docs/MODEL_SETUP.md"
+  "delivery/docs/TECHNICAL_STUDY_REPORT.md"
+  "delivery/sample/input-sample.mp4"
+  "delivery/sample/output-sample.mp4"
+)
+
+for relative_path in "${required_source_files[@]}"; do
+  if [ ! -s "${ROOT_DIR}/${relative_path}" ]; then
+    echo "[error] required source file is missing or empty: ${relative_path}" >&2
+    exit 2
+  fi
+done
 
 mkdir -p "${OUT_DIR}"
 DOC_SET="${OUT_DIR}/Video2Smplx_document_set_${STAMP}"
 mkdir -p "${DOC_SET}"
 
-cp -R "${DELIVERY_DIR}" "${DOC_SET}/delivery"
-cp -R "${ROOT_DIR}/tools" "${DOC_SET}/tools"
-cp -R "${ROOT_DIR}/video2smplx" "${DOC_SET}/video2smplx"
-cp -R "${ROOT_DIR}/requirements" "${DOC_SET}/requirements"
-cp -R "${ROOT_DIR}/tests" "${DOC_SET}/tests"
-cp "${ROOT_DIR}/zero_filter_render.py" "${DOC_SET}/zero_filter_render.py"
-cp "${ROOT_DIR}/smplestx_wilor_emoca_fuse.py" "${DOC_SET}/smplestx_wilor_emoca_fuse.py"
-cp "${ROOT_DIR}/README.md" "${DOC_SET}/README.md"
+# Package only Git-tracked source and documentation. Runtime weights and final
+# generated outputs are delivered in separate archives and overlaid later.
+TRACKED_LIST="$(mktemp)"
+trap 'rm -f "${TRACKED_LIST}"' EXIT
+while IFS= read -r -d '' relative_path; do
+  case "${relative_path}" in
+    delivery/models/correctors/*|delivery/final_outputs/*) continue ;;
+    SMPLest-X-Inference/README.md|SMPLest-X-Inference/SHARED_ENV_CHANGELOG.md) continue ;;
+    SMPLest-X-Inference/pretrained_models/*) continue ;;
+    SMPLest-X-Inference/human_models/human_model_files/*) continue ;;
+    WiLoR-Inference/README.md|WiLoR-Inference/SHARED_ENV_CHANGELOG.md) continue ;;
+    WiLoR-Inference/pretrained_models/*|WiLoR-Inference/mano_data/*) continue ;;
+    EMOCA-Inference/README.md|EMOCA-Inference/SHARED_ENV_CHANGELOG.md) continue ;;
+    EMOCA-Inference/assets/*) continue ;;
+  esac
+  if [ -e "${ROOT_DIR}/${relative_path}" ]; then
+    printf '%s\0' "${relative_path}"
+  fi
+done < <(git -C "${ROOT_DIR}" ls-files -z) > "${TRACKED_LIST}"
 
-mkdir -p "${DOC_SET}/docs/media"
-cp -R "${ROOT_DIR}/docs/media/." "${DOC_SET}/docs/media/"
+rsync -a --from0 --files-from="${TRACKED_LIST}" "${ROOT_DIR}/" "${DOC_SET}/"
 
-# Copy upstream runtime source without restricted/large model assets. Overlay
-# the separately generated runtime-model archive after extraction.
-rsync -a \
-  --exclude='.git/' --exclude='README.md' --exclude='__pycache__/' --exclude='outputs/' \
-  --exclude='pretrained_models/' \
-  --exclude='human_models/human_model_files/' \
-  "${ROOT_DIR}/SMPLest-X-Inference/" "${DOC_SET}/SMPLest-X-Inference/"
-rsync -a \
-  --exclude='.git/' --exclude='README.md' --exclude='__pycache__/' \
-  --exclude='pretrained_models/' --exclude='mano_data/' \
-  "${ROOT_DIR}/WiLoR-Inference/" "${DOC_SET}/WiLoR-Inference/"
-rsync -a \
-  --exclude='.git/' --exclude='README.md' --exclude='__pycache__/' --exclude='assets/' \
-  "${ROOT_DIR}/EMOCA-Inference/" "${DOC_SET}/EMOCA-Inference/"
+GIT_REVISION="$(git -C "${ROOT_DIR}" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+if git -C "${ROOT_DIR}" diff --quiet && git -C "${ROOT_DIR}" diff --cached --quiet; then
+  SOURCE_STATE="clean"
+else
+  SOURCE_STATE="modified tracked files included"
+fi
+cat > "${DOC_SET}/SOURCE_MANIFEST.txt" <<EOF
+Video2Smplx source and documentation package
+Git revision: ${GIT_REVISION}
+Source state: ${SOURCE_STATE}
+Created UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+Runtime model weights are intentionally excluded. Extract the separate
+Video2Smplx_runtime_models_*.tar archive and overlay its contents on this
+directory before running inference. See README.md section 6.
+EOF
 
 COPYFILE_DISABLE=1 tar --no-xattrs -czf "${OUT_DIR}/Video2Smplx_document_set_${STAMP}.tar.gz" -C "${OUT_DIR}" "$(basename "${DOC_SET}")"
+shasum -a 256 "${OUT_DIR}/Video2Smplx_document_set_${STAMP}.tar.gz" \
+  > "${OUT_DIR}/Video2Smplx_document_set_${STAMP}.tar.gz.sha256"
 
 echo "[done] document set folder: ${DOC_SET}"
 echo "[done] archive: ${OUT_DIR}/Video2Smplx_document_set_${STAMP}.tar.gz"
+echo "[done] checksum: ${OUT_DIR}/Video2Smplx_document_set_${STAMP}.tar.gz.sha256"
