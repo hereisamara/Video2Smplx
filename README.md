@@ -108,7 +108,6 @@ Video2Smplx/
   video2smplx/                  integrated pipeline and model wrappers
   tools/                        evaluation, diagnostics, and post-processing
   tests/                        automated pipeline tests
-  research/                     retraining and non-adopted experiments
   docs/media/                   README previews and ablation media
   SMPLest-X-Inference/          upstream body estimator source/assets
   WiLoR-Inference/              upstream hand estimator source/assets
@@ -124,11 +123,6 @@ Video2Smplx/
 | `delivery/source/face_estimation_cli.py` | EMOCA expression and jaw estimation |
 | `delivery/source/combine_smooth_render_cli.py` | Fusion, smoothing, NPZ export, and rendering |
 | `delivery/source/integrated_postprocessed_pipeline_cli.py` | Final one-process pipeline and correctors |
-
-Training dataset builders, GT oracle programs, training jobs, and rejected
-experiments are under `research/signlanguage_training/`. They are not required
-for inference with supplied checkpoints and are excluded from the clean source
-delivery.
 
 ## 5. Requirements and Environment
 
