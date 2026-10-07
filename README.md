@@ -689,9 +689,7 @@ When publishing results, cite the upstream methods used and describe this
 project's values as held-out UBody SignLanguage-section results, not official
 whole-UBody leaderboard values.
 
-## 16. License and Authors
-
-Project integration and delivery preparation: **Khin Eaindray Htun**.
+## 16. License
 
 This repository does not grant a single replacement license for bundled or
 referenced third-party projects and model assets. SMPLest-X, WiLoR, EMOCA,
