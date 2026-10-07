@@ -52,13 +52,21 @@ Skip flags (resume a partial run)
 """
 
 import argparse
+import json
 import os
 import pickle
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from video2smplx.fusion import (
+    FusionStats,
+    extract_frame_id,
+    fuse_frame,
+    normalize_emoca_frame_id,
+    validate_person,
+)
 
 # ---------------------------------------------------------------------------
 # Project root and sub-project directories
@@ -86,12 +94,6 @@ DEFAULT_SMPLX_MODEL   = str(
 def _banner(title: str):
     bar = '=' * 62
     print(f'\n{bar}\n  {title}\n{bar}')
-
-
-def _extract_id(filename: str):
-    """Return the last integer found in a filename, or None."""
-    m = re.findall(r'\d+', filename)
-    return int(m[-1]) if m else None
 
 
 def conda_run(env: str, script: Path, script_args: list,
@@ -297,34 +299,34 @@ def stage_fuse(smplestx_dir: Path, wilor_dir: Path,
       - Replace left/right_hand_pose with WiLoR values (if available).
       - Replace expression (50-dim) and jaw_pose (3-dim) with EMOCA (if available).
     Falls back to the original SMPLest-X values when a specialist has no data.
+    Rebuilds smplx_param_vector immediately so fused params are valid even
+    when rendering is skipped.
 
     WiLoR files: <stem>_params.pkl  →  frame id = last int in stem
-    EMOCA files: <stem>_params.pkl  →  frame id = last int in stem
-      (visualize3.py names output by image stem, same as SMPLest-X)
+    EMOCA files: frame_{N*100}_params.pkl  →  frame id = last int / 100
     """
     _banner('STAGE 4 — Parameter fusion (SMPLest-X + WiLoR + EMOCA)')
     out_dir.mkdir(parents=True, exist_ok=True)
+    stats = FusionStats()
 
     # Index WiLoR: frame_id → path
-    wilor_map = {}
+    wilor_map: dict[int, Path] = {}
     if wilor_dir.exists():
-        for f in os.listdir(wilor_dir):
-            if f.endswith('.pkl'):
-                fid = _extract_id(f)
-                if fid is not None:
-                    wilor_map[fid] = wilor_dir / f
+        for fp in sorted(wilor_dir.glob('*.pkl')):
+            fid = extract_frame_id(fp.name)
+            if fid is not None:
+                wilor_map[fid] = fp
 
     # Index EMOCA: frame_id → path
     # TestData (used by visualize3.py) names images as frame_{N*100} internally,
     # so EMOCA saves "frame_00100_params.pkl" for frame 1, "frame_00200_params.pkl"
     # for frame 2, etc.  Divide the extracted integer by 100 to get the real frame id.
-    emoca_map = {}
+    emoca_map: dict[int, Path] = {}
     if emoca_dir.exists():
-        for f in os.listdir(emoca_dir):
-            if f.endswith('.pkl'):
-                raw = _extract_id(f)
-                if raw is not None:
-                    emoca_map[raw // 100] = emoca_dir / f
+        for fp in sorted(emoca_dir.glob('*.pkl')):
+            fid = normalize_emoca_frame_id(fp.name)
+            if fid is not None:
+                emoca_map[fid] = fp
 
     files = sorted(smplestx_dir.glob('*.pkl')) if smplestx_dir.exists() else []
     if not files:
@@ -333,9 +335,8 @@ def stage_fuse(smplestx_dir: Path, wilor_dir: Path,
 
     from tqdm import tqdm
 
-    wm = wskip = em = eskip = errs = 0
-
     for fp in tqdm(files, desc='  Fusing frames'):
+        stats.total_frames += 1
         dst = out_dir / fp.name
         try:
             with open(fp, 'rb') as f:
@@ -343,48 +344,51 @@ def stage_fuse(smplestx_dir: Path, wilor_dir: Path,
 
             if not data:
                 shutil.copy(fp, dst)
-                errs += 1
+                stats.empty_smplestx_frames += 1
                 continue
 
-            person = data[0]
-            fid    = _extract_id(fp.name)
+            fid = extract_frame_id(fp.name)
 
-            # ── WiLoR: replace hand poses ──────────────────────────────────
+            wilor_params = None
             if fid in wilor_map:
                 with open(wilor_map[fid], 'rb') as f:
-                    w = pickle.load(f)
-                if w.get('right_hand_pose') is not None:
-                    person['right_hand_pose'] = w['right_hand_pose']
-                if w.get('left_hand_pose') is not None:
-                    person['left_hand_pose'] = w['left_hand_pose']
-                wm += 1
+                    wilor_params = pickle.load(f)
+                stats.wilor_matched += 1
             else:
-                wskip += 1
+                stats.wilor_missing += 1
 
-            # ── EMOCA: replace expression and jaw pose ─────────────────────
+            emoca_params = None
             if fid in emoca_map:
                 with open(emoca_map[fid], 'rb') as f:
-                    e = pickle.load(f)
-                if 'exp' in e:
-                    person['expression'] = e['exp'].flatten()
-                if 'jaw_pose' in e:
-                    person['jaw_pose'] = e['jaw_pose'].flatten()
-                em += 1
+                    emoca_params = pickle.load(f)
+                stats.emoca_matched += 1
             else:
-                eskip += 1
+                stats.emoca_missing += 1
 
-            data[0] = person
+            fused_data = fuse_frame(data, wilor_params, emoca_params)
+            validation_errors = validate_person(fused_data[0])
+            if validation_errors:
+                stats.validation_errors += len(validation_errors)
+                stats.warnings.append(f'{fp.name}: {"; ".join(validation_errors)}')
+
             with open(dst, 'wb') as f:
-                pickle.dump(data, f)
+                pickle.dump(fused_data, f)
 
         except Exception as ex:
             print(f'\n  [ERROR] {fp.name}: {ex}')
             shutil.copy(fp, dst)
-            errs += 1
+            stats.errors += 1
 
-    print(f'\n  WiLoR  — matched: {wm}  skipped (no data): {wskip}')
-    print(f'  EMOCA  — matched: {em}  skipped (no data): {eskip}')
-    print(f'  Errors: {errs}   Total frames: {len(files)}')
+    report_path = out_dir / 'fusion_report.json'
+    with open(report_path, 'w') as f:
+        json.dump(stats.to_dict(), f, indent=2)
+
+    print(f'\n  WiLoR  — matched: {stats.wilor_matched}  skipped (no data): {stats.wilor_missing}')
+    print(f'  EMOCA  — matched: {stats.emoca_matched}  skipped (no data): {stats.emoca_missing}')
+    print(f'  Empty SMPLest-X frames: {stats.empty_smplestx_frames}')
+    print(f'  Validation errors: {stats.validation_errors}')
+    print(f'  Errors: {stats.errors}   Total frames: {stats.total_frames}')
+    print(f'  Fusion report: {report_path}')
     return out_dir
 
 

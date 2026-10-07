@@ -1,0 +1,7 @@
+.venv-eval/
+.cache/pose_landmarker_lite.task
+__pycache__/
+*.py[cod]
+.DS_Store
+artifacts/
+tmp/

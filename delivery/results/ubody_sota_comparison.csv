@@ -1,0 +1,10 @@
+method,evaluation_set,all_mpvpe_or_pve_mm,all_pa_mpvpe_or_pa_pve_mm,hand_mpvpe_or_pve_mm,hand_pa_mpvpe_or_pa_pve_mm,face_mpvpe_or_pve_mm,face_pa_mpvpe_or_pa_pve_mm,source
+Hand4Whole,UBody,104.1,44.8,45.7,8.9,27.0,2.8,SMPLer-X Table 6 / SMPLest-X Table IX
+OSX finetuned,UBody,81.9,42.2,41.5,8.6,21.2,2.0,SMPLer-X Table 6 / SMPLest-X Table IX
+AiOS,UBody,58.6,32.5,39.0,7.3,19.6,2.8,SMPLest-X Table IX
+SMPLer-X-L20 finetuned,UBody,57.4,31.9,40.2,10.3,21.6,2.8,SMPLer-X Table 6 / SMPLest-X Table IX
+Multi-HMR ViT-L/14,UBody,51.2,21.0,25.0,7.2,16.2,1.8,Multi-HMR Table 5
+SMPLest-X-H40,UBody,51.1,27.8,32.9,7.9,21.4,2.5,SMPLest-X Table IX
+SMPLest-X-H40 finetuned,UBody,50.2,26.9,31.8,8.4,18.9,2.4,SMPLest-X Table IX
+CoEvoer,UBody,51.6,26.5,27.8,7.1,16.2,1.8,CoEvoer Table 1
+Ours 2D upper scale 0.75,UBody SignLanguage section,54.11,28.55,29.52,5.15,12.63,,Local held-out SignLanguage-section evaluation; face PA not reported in this run

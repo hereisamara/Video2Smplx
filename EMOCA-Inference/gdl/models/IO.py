@@ -22,6 +22,22 @@ import sys
 from pathlib import Path
 
 
+def _find_checkpoints(checkpoint_dir):
+    checkpoint_dir = Path(checkpoint_dir)
+    checkpoints = sorted(checkpoint_dir.rglob("*.ckpt"))
+    if checkpoints:
+        return checkpoints
+
+    # Some EMOCA releases store Lightning checkpoints without a .ckpt suffix.
+    # Accept regular extensionless files so those releases load without
+    # renaming or symlinking model assets.
+    return sorted(
+        path
+        for path in checkpoint_dir.rglob("*")
+        if path.is_file() and path.suffix == ""
+    )
+
+
 def locate_checkpoint(cfg, replace_root = None, relative_to = None, mode=None):
     checkpoint_dir = cfg.inout.checkpoint_dir
     if replace_root is not None and relative_to is not None:
@@ -31,10 +47,10 @@ def locate_checkpoint(cfg, replace_root = None, relative_to = None, mode=None):
             print(f"Not replacing the root of checkpoint_dir '{checkpoint_dir}' beacuse the specified root does not fit:"
                   f"'{replace_root}'")
     print(f"Looking for checkpoint in '{checkpoint_dir}'")
-    checkpoints = sorted(list(Path(checkpoint_dir).rglob("*.ckpt")))
+    checkpoints = _find_checkpoints(checkpoint_dir)
     if len(checkpoints) == 0:
         print(f"Did not find checkpoints. Looking in subfolders")
-        checkpoints = sorted(list(Path(checkpoint_dir).rglob("*.ckpt")))
+        checkpoints = _find_checkpoints(checkpoint_dir)
         if len(checkpoints) == 0:
             print(f"Did not find checkpoints to resume from. Returning None")
             # sys.exit()

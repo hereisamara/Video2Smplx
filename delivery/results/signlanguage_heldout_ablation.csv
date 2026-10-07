@@ -1,0 +1,9 @@
+method,mpjpe_mm,pa_mpjpe_mm,mpvpe_mm,pa_mpvpe_mm,visible_upper_mpvpe_mm,hand_wrist_mpvpe_mm,hand_pa_mpvpe_mm,face_mpvpe_mm,notes
+Raw SMPLest-X,74.89,41.54,84.60,30.50,83.53,45.70,10.92,14.63,Raw body estimator baseline on held-out SignLanguage section
+Fusion no stabilization,73.48,41.90,83.39,30.92,82.33,45.50,20.68,14.77,SMPLest-X plus WiLoR plus EMOCA fusion without stabilization
+Global corrector,66.47,41.90,68.58,30.92,65.50,46.16,20.68,12.71,Learned global_orient plus transl correction
+Global plus hand corrector,63.94,38.24,67.70,29.62,64.49,32.21,5.17,12.70,Global corrector followed by hand wrist/finger residual correction
+Non-2D upper scale 0.75,,,56.52,,54.42,30.89,,,SMPL-X-parameter-only upper-body residual corrector; partial metrics available
+2D upper scale 0.50,53.20,33.99,56.67,28.15,54.26,29.75,5.16,12.16,YOLO-pose-guided upper-body correction applied at 50 percent correction scale
+2D upper scale 0.75,51.10,34.47,54.11,28.55,51.69,29.52,5.15,12.63,Best current held-out setting
+2D upper scale 1.00,51.71,36.57,54.33,29.67,51.73,30.01,5.15,13.56,Full predicted upper-body residual correction
